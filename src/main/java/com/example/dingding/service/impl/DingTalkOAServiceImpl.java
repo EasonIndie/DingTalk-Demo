@@ -1,5 +1,6 @@
 package com.example.dingding.service.impl;
 
+import com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody;
 import com.aliyun.tea.TeaException;
 import com.dingtalk.api.DefaultDingTalkClient;
 import com.dingtalk.api.DingTalkClient;
@@ -12,6 +13,8 @@ import com.dingtalk.api.response.OapiV2UserListResponse;
 import com.example.dingding.config.Constants;
 import com.example.dingding.config.DingdingConfig;
 import com.example.dingding.service.DingTalkOAService;
+import com.example.dingding.entity.*;
+import com.example.dingding.service.*;
 import com.taobao.api.ApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +48,21 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private IProcessInstanceService processInstanceService;
+
+    @Autowired
+    private IFormComponentValueService formComponentValueService;
+
+    @Autowired
+    private IOperationRecordService operationRecordService;
+
+    @Autowired
+    private ITaskService taskService;
+
+    @Autowired
+    private ISyncRecordService syncRecordService;
 
     // 钉钉Workflow API客户端（懒加载）
     private volatile com.aliyun.dingtalkworkflow_1_0.Client workflowClient;
@@ -114,8 +132,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                     List<String> instanceIds = getFormInstantIds(formId, String.valueOf(userId), startTime);
                     if (!CollectionUtils.isEmpty(instanceIds)) {
                         log.info("表单ID: {}, 用户ID: {}, 从时间{}开始获取到{}个实例ID", formId, userId, startTime, instanceIds.size());
-                        //通过实例id获取表单数据
-
+                        //通过实例id获取表单数据并保存
+                        syncProcessInstanceDetails(instanceIds, formId);
                     } else {
                         log.info("表单ID: {}, 用户ID: {}, 从时间{}开始未获取到实例ID", formId, userId, startTime);
                     }
@@ -492,5 +510,305 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
         } catch (Exception e) {
             log.error("缓存用户ID到Redis时发生异常", e);
         }
+    }
+
+    /**
+     * 同步流程实例详情
+     *
+     * @param instanceIds 实例ID列表
+     * @param formId 表单ID（用作processCode）
+     */
+    private void syncProcessInstanceDetails(List<String> instanceIds, String formId) {
+        if (CollectionUtils.isEmpty(instanceIds)) {
+            return;
+        }
+
+        // 记录同步开始
+        SyncRecord syncRecord = syncRecordService.startSync("PROCESS_DETAILS", instanceIds.size());
+        int successCount = 0;
+        int failCount = 0;
+        StringBuilder errorMessages = new StringBuilder();
+
+        try {
+            for (String instanceId : instanceIds) {
+                try {
+                    // 检查是否已存在
+                    ProcessInstance existingInstance = processInstanceService.getByProcessInstanceId(instanceId);
+                    if (existingInstance != null) {
+                        log.debug("流程实例已存在，跳过: {}", instanceId);
+                        successCount++;
+                        continue;
+                    }
+
+                    // 获取流程实例详情
+                    ProcessInstanceDetails details = getProcessInstanceDetails(instanceId, formId);
+                    if (details != null) {
+                        // 保存数据
+                        saveProcessInstanceDetails(details);
+                        successCount++;
+                        log.debug("成功保存流程实例详情: {}", instanceId);
+                    } else {
+                        failCount++;
+                        errorMessages.append("获取流程实例详情失败: ").append(instanceId).append("; ");
+                    }
+                } catch (Exception e) {
+                    failCount++;
+                    errorMessages.append("处理流程实例失败: ").append(instanceId).append(", 错误: ").append(e.getMessage()).append("; ");
+                    log.error("处理流程实例失败: {}", instanceId, e);
+                }
+            }
+
+            // 记录同步完成
+            if (failCount == 0) {
+                syncRecordService.completeSync(syncRecord, successCount);
+            } else {
+                syncRecordService.failSync(syncRecord, successCount, errorMessages.toString());
+            }
+
+            log.info("同步流程实例详情完成，总数: {}, 成功: {}, 失败: {}", instanceIds.size(), successCount, failCount);
+
+        } catch (Exception e) {
+            syncRecordService.failSync(syncRecord, successCount, "同步过程中发生异常: " + e.getMessage());
+            log.error("同步流程实例详情时发生异常", e);
+        }
+    }
+
+    /**
+     * 获取流程实例详情
+     *
+     * @param instanceId 实例ID
+     * @param formId 表单ID（用作processCode）
+     * @return 流程实例详情
+     */
+    private ProcessInstanceDetails getProcessInstanceDetails(String instanceId, String formId) {
+        try {
+            String accessToken = getValidAccessToken();
+            if (!StringUtils.hasText(accessToken)) {
+                log.error("获取access_token失败，无法获取流程实例详情");
+                return null;
+            }
+
+            com.aliyun.dingtalkworkflow_1_0.Client client = getWorkflowClient();
+
+            // 构建请求头
+            com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceHeaders headers =
+                new com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceHeaders();
+            headers.xAcsDingtalkAccessToken = accessToken;
+
+            // 构建请求体
+            com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceRequest request =
+                new com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceRequest()
+                    .setProcessInstanceId(instanceId);
+
+            // 调用API
+            com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponse response =
+                client.getProcessInstanceWithOptions(request, headers, new com.aliyun.teautil.models.RuntimeOptions());
+
+            if (response != null && response.getBody() != null && response.getBody().getResult() != null) {
+                return parseProcessInstanceDetails(response.getBody().getResult(), instanceId, formId);
+            }
+
+        } catch (Exception e) {
+            log.error("获取流程实例详情失败: {}", instanceId, e);
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析流程实例详情
+     */
+    private ProcessInstanceDetails parseProcessInstanceDetails(GetProcessInstanceResponseBody.GetProcessInstanceResponseBodyResult result, String instanceId, String formId) {
+        ProcessInstanceDetails details = new ProcessInstanceDetails();
+
+        try {
+            // 解析主流程实例信息
+            ProcessInstance processInstance = new ProcessInstance();
+
+            // 设置流程实例ID（必需字段）
+            processInstance.setProcessInstanceId(instanceId);
+
+            // 设置流程模板ID - 使用传入的formId作为processCode
+            processInstance.setProcessCode(formId);
+
+            // 根据钉钉SDK实体类获取其他字段
+            processInstance.setTitle(result.getTitle());
+            processInstance.setBusinessId(result.getBusinessId());
+            processInstance.setOriginatorUserid(result.getOriginatorUserId());
+            processInstance.setOriginatorDeptId(result.getOriginatorDeptId());
+            processInstance.setOriginatorDeptName(result.getOriginatorDeptName());
+            processInstance.setStatus(result.getStatus());
+            processInstance.setResult(result.getResult());
+            processInstance.setCreateTime(parseDateTime(result.getCreateTime()));
+            processInstance.setFinishTime(parseDateTime(result.getFinishTime()));
+            processInstance.setBizAction(result.getBizAction());
+            processInstance.setBizData(result.getBizData());
+
+            // 解析附属实例和抄送用户
+            if (result.getAttachedProcessInstanceIds() != null) {
+                processInstance.setAttachedProcessInstanceIds(result.getAttachedProcessInstanceIds());
+            }
+            if (result.getCcUserIds() != null) {
+                processInstance.setCcUserids(result.getCcUserIds());
+            }
+
+            details.setProcessInstance(processInstance);
+
+            // 解析表单组件值
+            if (result.getFormComponentValues() != null && !result.getFormComponentValues().isEmpty()) {
+                List<FormComponentValue> formComponentValues = new ArrayList<>();
+
+                for (com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody.GetProcessInstanceResponseBodyResultFormComponentValues component : result.getFormComponentValues()) {
+                    FormComponentValue fcv = new FormComponentValue();
+
+                    // 从请求参数中获取processInstanceId
+                    fcv.setProcessInstanceId(instanceId);
+                    fcv.setComponentId(component.getId());
+                    fcv.setComponentName(component.getName());
+                    fcv.setComponentType(component.getComponentType());
+                    fcv.setValue(component.getValue());
+                    fcv.setExtValue(component.getExtValue());
+                    fcv.setBizAlias(component.getBizAlias());
+
+                    // 设置字段分类
+                    fcv.setFieldCategory(determineFieldCategory(component.getName()));
+                    fcv.setIsKeyField(isKeyField(component.getName()));
+
+                    formComponentValues.add(fcv);
+                }
+                details.setFormComponentValues(formComponentValues);
+            }
+
+            // 解析操作记录
+            if (result.getOperationRecords() != null && !result.getOperationRecords().isEmpty()) {
+                List<OperationRecord> operationRecords = new ArrayList<>();
+
+                for (com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody.GetProcessInstanceResponseBodyResultOperationRecords record : result.getOperationRecords()) {
+                    OperationRecord or = new OperationRecord();
+
+                    or.setProcessInstanceId(instanceId);
+                    or.setActivityId(record.getActivityId());
+                    or.setOperationDate(parseDateTime(record.getDate()));
+                    or.setUserId(record.getUserId());
+                    or.setShowName(record.getShowName());
+                    or.setOperationType(record.getType());
+                    or.setResult(record.getResult());
+                    or.setRemark(record.getRemark());
+
+                    // 解析图片附件
+                    if (record.getImages() != null && !record.getImages().isEmpty()) {
+                        // images字段可能是String列表或其他格式，根据实际SDK返回调整
+                        try {
+                            or.setImages(new ArrayList<>(record.getImages()));
+                        } catch (Exception e) {
+                            // 如果解析失败，使用空列表
+                            or.setImages(new ArrayList<>());
+                        }
+                    }
+
+                    operationRecords.add(or);
+                }
+                details.setOperationRecords(operationRecords);
+            }
+
+            // tasks不需要解析保存，根据要求跳过
+            details.setTasks(new ArrayList<>());
+
+        } catch (Exception e) {
+            log.error("解析流程实例详情失败", e);
+            // 返回空的details对象，避免null pointer
+            details.setProcessInstance(new ProcessInstance());
+            details.setFormComponentValues(new ArrayList<>());
+            details.setOperationRecords(new ArrayList<>());
+            details.setTasks(new ArrayList<>());
+        }
+
+        return details;
+    }
+
+    /**
+     * 保存流程实例详情
+     */
+    private void saveProcessInstanceDetails(ProcessInstanceDetails details) {
+        // 保存主流程实例
+        processInstanceService.saveOrUpdate(details.getProcessInstance());
+
+        // 批量保存表单组件值
+        if (details.getFormComponentValues() != null && !details.getFormComponentValues().isEmpty()) {
+            formComponentValueService.saveBatch(details.getFormComponentValues());
+        }
+
+        // 批量保存操作记录
+        if (details.getOperationRecords() != null && !details.getOperationRecords().isEmpty()) {
+            operationRecordService.saveBatch(details.getOperationRecords());
+        }
+
+        // 根据要求，tasks不需要解析和保存
+        log.debug("跳过tasks保存，按业务要求不需要存储");
+    }
+
+    /**
+     * 解析日期时间
+     */
+    private LocalDateTime parseDateTime(String dateTimeStr) {
+        if (!StringUtils.hasText(dateTimeStr)) {
+            return null;
+        }
+        try {
+            // 处理钉钉返回的时间格式 (2025-11-19T11:11Z)
+            return LocalDateTime.parse(dateTimeStr.replace("Z", ""));
+        } catch (Exception e) {
+            log.warn("解析日期时间失败: {}", dateTimeStr, e);
+            return null;
+        }
+    }
+
+    /**
+     * 确定字段分类
+     */
+    private String determineFieldCategory(String componentName) {
+        if (componentName == null) return "其他";
+
+        if (componentName.contains("姓名") || componentName.contains("部门") || componentName.contains("申报日期")) {
+            return "基础信息";
+        } else if (componentName.contains("改善") || componentName.contains("建议") || componentName.contains("提案")) {
+            return "项目详情";
+        } else if (componentName.contains("完成") || componentName.contains("实施")) {
+            return "完成情况";
+        } else {
+            return "其他";
+        }
+    }
+
+    /**
+     * 判断是否关键字段
+     */
+    private Boolean isKeyField(String componentName) {
+        if (componentName == null) return false;
+
+        return componentName.contains("等级") ||
+               componentName.contains("经济效益") ||
+               componentName.contains("类别") ||
+               componentName.contains("改善");
+    }
+
+    /**
+     * 流程实例详情内部类
+     */
+    private static class ProcessInstanceDetails {
+        private ProcessInstance processInstance;
+        private List<FormComponentValue> formComponentValues;
+        private List<OperationRecord> operationRecords;
+        private List<Task> tasks;
+
+        // getters and setters
+        public ProcessInstance getProcessInstance() { return processInstance; }
+        public void setProcessInstance(ProcessInstance processInstance) { this.processInstance = processInstance; }
+        public List<FormComponentValue> getFormComponentValues() { return formComponentValues; }
+        public void setFormComponentValues(List<FormComponentValue> formComponentValues) { this.formComponentValues = formComponentValues; }
+        public List<OperationRecord> getOperationRecords() { return operationRecords; }
+        public void setOperationRecords(List<OperationRecord> operationRecords) { this.operationRecords = operationRecords; }
+        public List<Task> getTasks() { return tasks; }
+        public void setTasks(List<Task> tasks) { this.tasks = tasks; }
     }
 }

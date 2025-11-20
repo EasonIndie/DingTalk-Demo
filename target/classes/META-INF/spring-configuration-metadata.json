@@ -1,0 +1,122 @@
+{
+  "groups": [
+    {
+      "name": "dingding",
+      "type": "com.example.dingding.config.DingdingConfig",
+      "sourceType": "com.example.dingding.config.DingdingConfig"
+    },
+    {
+      "name": "dingding.api",
+      "type": "com.example.dingding.config.DingdingConfig$Api",
+      "sourceType": "com.example.dingding.config.DingdingConfig"
+    },
+    {
+      "name": "dingding.app",
+      "type": "com.example.dingding.config.DingdingConfig$App",
+      "sourceType": "com.example.dingding.config.DingdingConfig"
+    },
+    {
+      "name": "dingding.token",
+      "type": "com.example.dingding.config.DingdingConfig$Token",
+      "sourceType": "com.example.dingding.config.DingdingConfig"
+    }
+  ],
+  "properties": [
+    {
+      "name": "dingding.api.base-url",
+      "type": "java.lang.String",
+      "description": "钉钉API基础地址",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": "https:\/\/oapi.dingtalk.com"
+    },
+    {
+      "name": "dingding.api.connect-timeout",
+      "type": "java.lang.Integer",
+      "description": "连接超时时间（毫秒）",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": 10000
+    },
+    {
+      "name": "dingding.api.department-list-url",
+      "type": "java.lang.String",
+      "description": "获取部门列表的API",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": "\/topapi\/v2\/department\/listsub"
+    },
+    {
+      "name": "dingding.api.read-timeout",
+      "type": "java.lang.Integer",
+      "description": "读取超时时间（毫秒）",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": 15000
+    },
+    {
+      "name": "dingding.api.token-url",
+      "type": "java.lang.String",
+      "description": "获取access_token的API",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": "\/gettoken"
+    },
+    {
+      "name": "dingding.api.user-detail-url",
+      "type": "java.lang.String",
+      "description": "获取用户详细信息API",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": "\/topapi\/v2\/user\/getbyuserid"
+    },
+    {
+      "name": "dingding.api.user-list-url",
+      "type": "java.lang.String",
+      "description": "获取部门用户列表",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Api",
+      "defaultValue": "\/topapi\/v2\/user\/list"
+    },
+    {
+      "name": "dingding.app.app-key",
+      "type": "java.lang.String",
+      "description": "钉钉应用的AppKey",
+      "sourceType": "com.example.dingding.config.DingdingConfig$App"
+    },
+    {
+      "name": "dingding.app.app-secret",
+      "type": "java.lang.String",
+      "description": "钉钉应用的AppSecret",
+      "sourceType": "com.example.dingding.config.DingdingConfig$App"
+    },
+    {
+      "name": "dingding.app.app-type",
+      "type": "java.lang.String",
+      "description": "应用类型（内部应用\/第三方应用）",
+      "sourceType": "com.example.dingding.config.DingdingConfig$App",
+      "defaultValue": "INTERNAL"
+    },
+    {
+      "name": "dingding.app.corp-id",
+      "type": "java.lang.String",
+      "description": "企业ID",
+      "sourceType": "com.example.dingding.config.DingdingConfig$App"
+    },
+    {
+      "name": "dingding.app.name",
+      "type": "java.lang.String",
+      "description": "应用名称（用于标识不同应用）",
+      "sourceType": "com.example.dingding.config.DingdingConfig$App",
+      "defaultValue": "HIS云平台"
+    },
+    {
+      "name": "dingding.token.cache-duration",
+      "type": "java.lang.Long",
+      "description": "access_token缓存时间（毫秒），钉钉token有效期7200秒",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Token",
+      "defaultValue": 7000000
+    },
+    {
+      "name": "dingding.token.retry-times",
+      "type": "java.lang.Integer",
+      "description": "token获取失败重试次数",
+      "sourceType": "com.example.dingding.config.DingdingConfig$Token",
+      "defaultValue": 3
+    }
+  ],
+  "hints": []
+}

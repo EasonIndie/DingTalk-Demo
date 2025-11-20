@@ -13,7 +13,7 @@ public class Constants {
     public static String KEY_ALL_USER_IDS = "dingding:user:all_userids"; // 所有用户ID集合
 
     // 数据过期时间（秒）- 24小时
-    public static long CACHE_EXPIRE_TIME = 86400;
+    public static long CACHE_EXPIRE_TIME = 86400*30;
     //表单map
     public static final Map<String,String> FORM_MAP ;
     static {
