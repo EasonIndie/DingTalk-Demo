@@ -38,6 +38,7 @@ nbdist/
 # Others
 *.log
 *.xml.versionsBackup
+.claude
 
 !*/build/*.java
 !*/build/*.html
