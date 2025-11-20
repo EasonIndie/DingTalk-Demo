@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -44,6 +45,9 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
 
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
+
+    // 钉钉Workflow API客户端（懒加载）
+    private volatile com.aliyun.dingtalkworkflow_1_0.Client workflowClient;
 
     @Override
     public int syncUserIds() {
@@ -90,7 +94,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     }
 
     @Override
-    public void syncOALSS() {
+    public void syncOALSS(LocalDateTime startTime) {
         try {
             //从缓存获取用户id
             log.info("开始从Redis缓存获取用户ID列表");
@@ -107,7 +111,14 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             for(String formId :Constants.FORM_MAP.keySet()){
                 //获取表单实例id
                 for (Object userId : userIds) {
-                    getFormInstantIds(formId, String.valueOf(userId));
+                    List<String> instanceIds = getFormInstantIds(formId, String.valueOf(userId), startTime);
+                    if (!CollectionUtils.isEmpty(instanceIds)) {
+                        log.info("表单ID: {}, 用户ID: {}, 从时间{}开始获取到{}个实例ID", formId, userId, startTime, instanceIds.size());
+                        //通过实例id获取表单数据
+
+                    } else {
+                        log.info("表单ID: {}, 用户ID: {}, 从时间{}开始未获取到实例ID", formId, userId, startTime);
+                    }
                 }
             }
 
@@ -117,33 +128,151 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
         }
     }
 
-    private void getFormInstantIds(String formId, String s) {
-        com.aliyun.dingtalkworkflow_1_0.Client client = Sample.createClient();
-        com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsHeaders listProcessInstanceIdsHeaders = new com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsHeaders();
-        listProcessInstanceIdsHeaders.xAcsDingtalkAccessToken = "<your access token>";
-        com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsRequest listProcessInstanceIdsRequest = new com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsRequest()
-                .setStartTime(1762735507000L)
-                .setEndTime(1763599507000L)
-                .setProcessCode("PROC-FD7C69D9-67AA-4C09-8DB1-3D1A40FC8679")
-                .setNextToken(0L)
-                .setMaxResults(20L)
-                .setUserIds(java.util.Arrays.asList(
-                        "2001051333950200"
-                ));
+      /**
+     * 获取钉钉Workflow API客户端（懒加载，线程安全）
+     * @return Workflow客户端实例
+     */
+    private com.aliyun.dingtalkworkflow_1_0.Client getWorkflowClient() {
+        if (workflowClient == null) {
+            synchronized (this) {
+                if (workflowClient == null) {
+                    try {
+                        com.aliyun.teaopenapi.models.Config config = new com.aliyun.teaopenapi.models.Config();
+                        config.protocol = "https";
+                        config.regionId = "central";
+                        workflowClient = new com.aliyun.dingtalkworkflow_1_0.Client(config);
+                        log.debug("成功初始化钉钉Workflow API客户端");
+                    } catch (Exception e) {
+                        log.error("初始化钉钉Workflow API客户端失败", e);
+                        throw new RuntimeException("初始化钉钉Workflow API客户端失败", e);
+                    }
+                }
+            }
+        }
+        return workflowClient;
+    }
+
+    private List<String> getFormInstantIds(String formId, String userId, LocalDateTime dateTime) {
         try {
-            client.listProcessInstanceIdsWithOptions(listProcessInstanceIdsRequest, listProcessInstanceIdsHeaders, new com.aliyun.teautil.models.RuntimeOptions());
+            log.info("开始获取表单实例ID，表单ID: {}, 用户ID: {}, 查询时间: {}", formId, userId, dateTime);
+
+            // 1. 获取有效的access_token
+            String accessToken = getValidAccessToken();
+            if (!StringUtils.hasText(accessToken)) {
+                log.error("获取access_token失败，无法获取表单实例ID");
+                return Collections.emptyList();
+            }
+
+            // 2. 获取Workflow客户端（单例，避免重复初始化）
+            com.aliyun.dingtalkworkflow_1_0.Client client = getWorkflowClient();
+
+            // 3. 构建请求头
+            com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsHeaders headers =
+                new com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsHeaders();
+            headers.xAcsDingtalkAccessToken = accessToken;
+
+            // 4. 根据传入的时间参数设置时间范围
+            long endTime = System.currentTimeMillis(); // 当前时间作为结束时间
+            long startTime = dateTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(); // 传入时间作为开始时间
+
+            log.info("查询时间范围: {} - {}",
+                    new java.util.Date(startTime), new java.util.Date(endTime));
+
+            // 5. 用于存储所有获取到的实例ID
+            List<String> allInstanceIds = new ArrayList<>();
+            Long nextToken = 0L; // 首次调用使用0
+            int pageCount = 0; // 记录分页次数
+            final Long maxResults = 20L; // 每页最大记录数
+
+            // 6. 循环获取所有分页数据
+            while (true) {
+                pageCount++;
+                log.debug("开始获取第{}页数据，nextToken: {}", pageCount, nextToken);
+
+                // 构建请求体
+                com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsRequest request =
+                    new com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsRequest()
+                        .setStartTime(startTime)
+                        .setEndTime(endTime)
+                        .setProcessCode(formId)  // 使用传入的表单ID
+                        .setNextToken(nextToken)
+                        .setMaxResults(maxResults)
+                        .setUserIds(java.util.Arrays.asList(userId)); // 使用传入的用户ID
+
+                // 调用API获取结果
+                com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsResponse response =
+                    client.listProcessInstanceIdsWithOptions(request, headers, new com.aliyun.teautil.models.RuntimeOptions());
+
+                // 处理响应结果
+                if (response != null && response.getBody() != null) {
+                    com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsResponseBody body = response.getBody();
+
+                    if (body != null && body.getResult() != null) {
+                        // 解析result中的数据
+                        com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsResponseBody.ListProcessInstanceIdsResponseBodyResult result = body.getResult();
+                        if (result != null) {
+                            // 获取当前页的实例ID列表
+                            List<String> currentPageIds = result.getList();
+                            if (currentPageIds != null && !currentPageIds.isEmpty()) {
+                                allInstanceIds.addAll(currentPageIds);
+                                log.info("第{}页获取到{}个实例ID，累计总数: {}",
+                                        pageCount, currentPageIds.size(), allInstanceIds.size());
+                            }
+                            // 检查是否还有下一页
+                            String nextToken1 = result.getNextToken();
+                            if (nextToken1 == null) {
+                                log.info("已获取到所有数据，共{}页，总计{}个实例ID",
+                                        pageCount, allInstanceIds.size());
+                                break; // 没有下一页，退出循环
+                            }else {
+                                nextToken = Long.valueOf(nextToken1);
+                            }
+                        } else {
+                            log.warn("第{}页结果为空，结束查询", pageCount);
+                            break;
+                        }
+                    } else {
+                        log.warn("第{}页响应体中的result为空，结束查询", pageCount);
+                        break;
+                    }
+                } else {
+                    log.warn("第{}页响应为空，结束查询", pageCount);
+                    break;
+                }
+
+                // 防止无限循环，设置最大分页数限制
+                if (pageCount > 1000) {
+                    log.warn("分页查询超过1000页，强制结束，当前总数: {}", allInstanceIds.size());
+                    break;
+                }
+            }
+
+            log.info("表单实例ID获取完成，表单ID: {}, 用户ID: {}, 总页数: {}, 总实例数: {}",
+                    formId, userId, pageCount, allInstanceIds.size());
+            log.debug("表单实例ID列表: {}", allInstanceIds);
+
+            return allInstanceIds;
+
         } catch (TeaException err) {
+            log.error("获取表单实例ID时发生TeaException，表单ID: {}, 用户ID: {}, 错误代码: {}, 错误信息: {}",
+                    formId, userId, err.getCode(), err.getMessage());
+
             if (!com.aliyun.teautil.Common.empty(err.code) && !com.aliyun.teautil.Common.empty(err.message)) {
-                // err 中含有 code 和 message 属性，可帮助开发定位问题
+                log.error("TeaException详细信息 - Code: {}, Message: {}", err.code, err.message);
             }
 
         } catch (Exception _err) {
             TeaException err = new TeaException(_err.getMessage(), _err);
-            if (!com.aliyun.teautil.Common.empty(err.code) && !com.aliyun.teautil.Common.empty(err.message)) {
-                // err 中含有 code 和 message 属性，可帮助开发定位问题
-            }
+            log.error("获取表单实例ID时发生异常，表单ID: {}, 用户ID: {}", formId, userId, err);
 
+            if (!com.aliyun.teautil.Common.empty(err.code) && !com.aliyun.teautil.Common.empty(err.message)) {
+                log.error("异常详细信息 - Code: {}, Message: {}", err.code, err.message);
+            }
         }
+
+        // 失败时返回空列表
+        log.warn("获取表单实例ID失败，返回空列表，表单ID: {}, 用户ID: {}", formId, userId);
+        return Collections.emptyList();
     }
 
     /**

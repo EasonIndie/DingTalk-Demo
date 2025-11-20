@@ -1,5 +1,7 @@
 package com.example.dingding.service;
 
+import java.time.LocalDateTime;
+
 /**
  * 钉钉办公自动化服务接口
  * 提供钉钉数据同步相关功能
@@ -20,6 +22,6 @@ public interface DingTalkOAService {
      */
     int syncUserIds();
 
-    void syncOALSS();
+    void syncOALSS(LocalDateTime startTime);
 
 }

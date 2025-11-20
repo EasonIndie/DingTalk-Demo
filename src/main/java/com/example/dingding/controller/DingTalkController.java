@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,15 +71,14 @@ public class DingTalkController {
             log.info("收到从缓存获取用户ID列表的请求");
 
             long startTime = System.currentTimeMillis();
-            dingTalkOAService.syncOALSS();
+            LocalDateTime start = LocalDateTime.now().minusDays(120);
+            dingTalkOAService.syncOALSS(start);
             long endTime = System.currentTimeMillis();
             long costTime = endTime - startTime;
 
             result.put("success", true);
-            result.put("message", "从缓存获取用户ID列表完成，请查看日志");
             result.put("costTime", costTime + "ms");
 
-            log.info("从缓存获取用户ID列表完成，耗时{}ms", costTime);
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {

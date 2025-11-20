@@ -1,6 +1,8 @@
 // This file is auto-generated, don't edit it. Thanks.
 
+import com.aliyun.dingtalkworkflow_1_0.models.ListProcessInstanceIdsResponse;
 import com.aliyun.tea.*;
+import com.aliyun.teautil.models.RuntimeOptions;
 
 public class Sample {
 
@@ -33,7 +35,7 @@ public class Sample {
                         "2001051333950200"
                 ));
         try {
-            client.listProcessInstanceIdsWithOptions(listProcessInstanceIdsRequest, listProcessInstanceIdsHeaders, new com.aliyun.teautil.models.RuntimeOptions());
+            ListProcessInstanceIdsResponse idsResponse = client.listProcessInstanceIdsWithOptions(listProcessInstanceIdsRequest, listProcessInstanceIdsHeaders, new RuntimeOptions());
         } catch (TeaException err) {
             if (!com.aliyun.teautil.Common.empty(err.code) && !com.aliyun.teautil.Common.empty(err.message)) {
                 // err 中含有 code 和 message 属性，可帮助开发定位问题
