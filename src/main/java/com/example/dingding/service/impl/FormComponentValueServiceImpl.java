@@ -50,6 +50,14 @@ public class FormComponentValueServiceImpl extends ServiceImpl<FormComponentValu
     }
 
     @Override
+    public List<FormComponentValue> listByProcessInstanceId(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        return baseMapper.selectByProcessInstanceId(processInstanceId);
+    }
+
+    @Override
     public boolean saveBatch(List<FormComponentValue> formComponentValues) {
         if (formComponentValues == null || formComponentValues.isEmpty()) {
             return true;

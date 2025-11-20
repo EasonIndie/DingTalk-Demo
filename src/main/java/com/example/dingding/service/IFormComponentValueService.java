@@ -60,6 +60,14 @@ public interface IFormComponentValueService extends IService<FormComponentValue>
     List<FormComponentValueMapper.EconomicBenefitStats> getEconomicBenefitStats(String startTime, String endTime);
 
     /**
+     * 根据流程实例ID查询表单组件值
+     *
+     * @param processInstanceId 流程实例ID
+     * @return 表单组件值列表
+     */
+    List<FormComponentValue> listByProcessInstanceId(String processInstanceId);
+
+    /**
      * 批量保存表单组件值
      *
      * @param formComponentValues 表单组件值列表

@@ -39,6 +39,12 @@ public interface FormComponentValueMapper extends BaseMapper<FormComponentValue>
     int deleteByProcessInstanceIds(@Param("processInstanceIds") List<String> processInstanceIds);
 
     /**
+     * 根据流程实例ID查询表单组件值
+     */
+    @Select("SELECT * FROM ding_form_component_values WHERE process_instance_id = #{processInstanceId}")
+    List<FormComponentValue> selectByProcessInstanceId(@Param("processInstanceId") String processInstanceId);
+
+    /**
      * 根据流程实例ID列表批量查询表单组件值
      */
     @Select("<script>" +

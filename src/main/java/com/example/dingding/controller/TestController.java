@@ -1,10 +1,10 @@
 package com.example.dingding.controller;
 
 import com.example.dingding.service.DingTalkOAService;
-import com.example.dingding.service.ILeanStatisticsService;
-import com.example.dingding.service.dto.OverallStatsDTO;
-import com.example.dingding.service.dto.DepartmentStatsDTO;
-import com.example.dingding.service.dto.PersonRankingDTO;
+import com.example.dingding.service.StatisticsService;
+import com.example.dingding.dto.DashboardStatsDTO;
+import com.example.dingding.dto.ProposalListDTO;
+import com.example.dingding.dto.ProposalQueryDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -27,7 +27,7 @@ public class TestController {
     private DingTalkOAService dingTalkOAService;
 
     @Autowired
-    private ILeanStatisticsService leanStatisticsService;
+    private StatisticsService statisticsService;
 
     /**
      * 测试同步用户ID
@@ -59,65 +59,44 @@ public class TestController {
     }
 
     /**
-     * 测试获取全员统计
+     * 测试获取指标看板统计
      */
-    @GetMapping("/overall-stats")
-    public OverallStatsDTO getOverallStats(
-            @RequestParam(defaultValue = "2025-11-01T00:00:00") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(defaultValue = "2025-11-30T23:59:59") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        try {
-            return leanStatisticsService.getOverallStatistics(startTime, endTime);
-        } catch (Exception e) {
-            log.error("获取全员统计失败", e);
-            return new OverallStatsDTO();
-        }
-    }
-
-    /**
-     * 测试获取部门统计
-     */
-    @GetMapping("/department-stats")
-    public DepartmentStatsDTO getDepartmentStats(
-            @RequestParam(defaultValue = "2025-11-01T00:00:00") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(defaultValue = "2025-11-30T23:59:59") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        try {
-            return leanStatisticsService.getDepartmentStatistics(startTime, endTime);
-        } catch (Exception e) {
-            log.error("获取部门统计失败", e);
-            return new DepartmentStatsDTO();
-        }
-    }
-
-    /**
-     * 测试获取个人排行
-     */
-    @GetMapping("/person-ranking")
-    public PersonRankingDTO getPersonRanking(
-            @RequestParam(defaultValue = "2025-11-01T00:00:00") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(defaultValue = "2025-11-30T23:59:59") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        try {
-            return leanStatisticsService.getPersonRanking(startTime, endTime);
-        } catch (Exception e) {
-            log.error("获取个人排行失败", e);
-            return new PersonRankingDTO();
-        }
-    }
-
-    /**
-     * 测试生成Excel报表
-     */
-    @PostMapping("/generate-excel")
-    public String generateExcel(
+    @GetMapping("/dashboard-stats")
+    public DashboardStatsDTO getDashboardStats(
             @RequestParam(defaultValue = "2025-11-01T00:00:00") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam(defaultValue = "2025-11-30T23:59:59") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
-            @RequestParam(defaultValue = "精益数据统计报告.xlsx") String fileName) {
+            @RequestParam(required = false) String area,
+            @RequestParam(required = false) String region) {
         try {
-            String outputPath = System.getProperty("user.home") + "/" + fileName;
-            boolean success = leanStatisticsService.generateExcelReport(startTime, endTime, outputPath);
-            return success ? "Excel报表生成成功: " + outputPath : "Excel报表生成失败";
+            return statisticsService.getDashboardStats(startTime, endTime, area, region);
         } catch (Exception e) {
-            log.error("生成Excel报表失败", e);
-            return "生成失败: " + e.getMessage();
+            log.error("获取指标看板统计失败", e);
+            return new DashboardStatsDTO();
+        }
+    }
+
+    /**
+     * 测试获取提案列表
+     */
+    @GetMapping("/proposal-list")
+    public ProposalListDTO getProposalList(
+            @RequestParam(defaultValue = "1") Integer current,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String proposerName,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) String status) {
+        try {
+            ProposalQueryDTO queryDTO = new ProposalQueryDTO();
+            queryDTO.setCurrent(current);
+            queryDTO.setSize(size);
+            queryDTO.setProposerName(proposerName);
+            queryDTO.setDepartment(department);
+            queryDTO.setStatus(status);
+
+            return statisticsService.getProposalList(queryDTO);
+        } catch (Exception e) {
+            log.error("获取提案列表失败", e);
+            return new ProposalListDTO();
         }
     }
 
