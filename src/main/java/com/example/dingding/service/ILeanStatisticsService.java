@@ -41,13 +41,4 @@ public interface ILeanStatisticsService {
      */
     PersonRankingDTO getPersonRanking(LocalDateTime startTime, LocalDateTime endTime);
 
-    /**
-     * 生成Excel报表
-     *
-     * @param startTime   开始时间
-     * @param endTime     结束时间
-     * @param outputPath  输出路径
-     * @return 是否成功
-     */
-    boolean generateExcelReport(LocalDateTime startTime, LocalDateTime endTime, String outputPath);
-}
+    }

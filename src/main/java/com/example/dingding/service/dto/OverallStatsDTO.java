@@ -1,9 +1,10 @@
 package com.example.dingding.service.dto;
 
 import lombok.Data;
+import java.util.List;
 
 /**
- * 全员统计DTO
+ * 全员统计DTO - 对应Excel Sheet1: 指标查看-全员
  *
  * @author system
  * @version 1.0.0
@@ -12,47 +13,45 @@ import lombok.Data;
 public class OverallStatsDTO {
 
     /**
-     * 本月合理化建议提案数
-     */
-    private Long monthlyProposalCount;
-
-    /**
-     * 参与提案人数
-     */
-    private Long participantCount;
-
-    /**
-     * 结案提案数
-     */
-    private Long completedProposalCount;
-
-    /**
-     * 结案率
-     */
-    private Double completionRate;
-
-    /**
-     * 平均处理天数
-     */
-    private Double averageProcessDays;
-
-    /**
-     * 产生经济效益
-     */
-    private Double totalEconomicBenefit;
-
-    /**
-     * 节约金额
-     */
-    private Double totalSavings;
-
-    /**
-     * 本月时间范围
-     */
-    private String monthRange;
-
-    /**
      * 统计时间
      */
     private String statisticsTime;
+
+    /**
+     * 指标列表
+     */
+    private List<IndicatorItem> indicatorList;
+
+    @Data
+    public static class IndicatorItem {
+        /**
+         * 指标名称
+         */
+        private String indicatorName;
+
+        /**
+         * 数值
+         */
+        private String value;
+
+        /**
+         * 单位
+         */
+        private String unit;
+
+        /**
+         * 环比
+         */
+        private String monthOnMonth;
+
+        /**
+         * 目标值
+         */
+        private String targetValue;
+
+        /**
+         * 达标率
+         */
+        private String complianceRate;
+    }
 }
