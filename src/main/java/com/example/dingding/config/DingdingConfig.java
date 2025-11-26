@@ -97,13 +97,28 @@ public class DingdingConfig {
          */
         private int readTimeout = 15000;
 
+        /**
+         * API查询时间跨度限制（天）
+         */
+        private int maxTimeRangeDays = 90;
+
+        /**
+         * API调用间隔时间（毫秒）
+         */
+        private long apiCallInterval = 100;
+
+        /**
+         * 最大时间拆分数量
+         */
+        private int maxTimeSplits = 50;
+
     }
     @Data
     public static class Token {
         /**
          * access_token缓存时间（毫秒），钉钉token有效期7200秒
          */
-        private long cacheDuration = 7000000;
+        private long cacheDuration = 7200;
 
         /**
          * token获取失败重试次数

@@ -74,8 +74,8 @@ dingding:
 
   # Token管理配置
   token:
-    # access_token缓存时间（毫秒），默认7000秒（钉钉token有效期7200秒，稍微提前刷新）
-    cache-duration: 7000000
+    # access_token缓存时间，默认7000秒（钉钉token有效期7200秒，稍微提前刷新）
+    cache-duration: 7000
     # token获取失败重试次数
     retry-times: 3
 

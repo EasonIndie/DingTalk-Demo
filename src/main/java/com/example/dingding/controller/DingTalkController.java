@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -71,8 +72,9 @@ public class DingTalkController {
             log.info("收到从缓存获取用户ID列表的请求");
 
             long startTime = System.currentTimeMillis();
-            LocalDateTime start = LocalDateTime.now().minusDays(120);
-            dingTalkOAService.syncOALSS(start);
+            LocalDateTime testTime = LocalDateTime.of(2025, 1, 1, 0, 0, 0);
+
+            dingTalkOAService.syncOALSS(testTime);
             long endTime = System.currentTimeMillis();
             long costTime = endTime - startTime;
 

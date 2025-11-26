@@ -18,8 +18,23 @@ public class Constants {
     public static final Map<String,String> FORM_MAP ;
     static {
         Map<String, String> map = new HashMap<>();
-        map.put("PROC-FD7C69D9-67AA-4C09-8DB1-3D1A40FC8679", "合理化建议【提给别的部门，提这个，无积分】");
+        map.put("PROC-48361881-52EB-4714-B94D-0CFA0C4CF553", "精益改善提案【先改再提，自己内部能解决】");
         map.put("PROC-7C4DF150-6853-49B3-B5E3-742E37CBFCC1", "信息中心专用【 精益改善提案】");
         FORM_MAP = Collections.unmodifiableMap(map);
     }
+
+    /**
+     * 3个月的毫秒数，用于时间拆分计算
+     */
+    public static final long THREE_MONTHS_MILLIS = 90L * 24 * 60 * 60 * 1000;
+
+    /**
+     * 默认API调用间隔（毫秒）
+     */
+    public static final long DEFAULT_API_CALL_INTERVAL = 100L;
+
+    /**
+     * 默认最大时间拆分数量
+     */
+    public static final int DEFAULT_MAX_TIME_SPLITS = 50;
 }
