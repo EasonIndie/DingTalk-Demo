@@ -72,7 +72,7 @@ public class DingTalkController {
             log.info("收到从缓存获取用户ID列表的请求");
 
             long startTime = System.currentTimeMillis();
-            LocalDateTime testTime = LocalDateTime.of(2025, 1, 1, 0, 0, 0);
+            LocalDateTime testTime = LocalDateTime.of(2025, 11, 1, 0, 0, 0);
 
             dingTalkOAService.syncOALSS(testTime);
             long endTime = System.currentTimeMillis();

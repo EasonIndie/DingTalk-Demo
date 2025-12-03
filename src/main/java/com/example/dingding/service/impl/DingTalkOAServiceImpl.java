@@ -41,7 +41,8 @@ import java.util.stream.Stream;
 public class DingTalkOAServiceImpl implements DingTalkOAService {
 
     private static final String TOKEN_CACHE_KEY = "dingding:token:access_token";
-    private static final Long ROOT_DEPT_ID = 14479368L; // 根部门ID
+    //private static final Long ROOT_DEPT_ID = 14479368L; // 根部门ID
+    private static final Long ROOT_DEPT_ID = 1L; // 根部门ID
 
     @Autowired
     private DingdingConfig dingdingConfig;
