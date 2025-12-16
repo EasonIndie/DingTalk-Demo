@@ -1,5 +1,6 @@
 package com.example.dingding.mapper;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.example.dingding.entity.DepartmentSCD2;
 import org.apache.ibatis.annotations.Mapper;
@@ -26,10 +27,9 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 当前版本记录，如果不存在返回null
      */
     default DepartmentSCD2 findCurrentByDeptId(Long deptId) {
-        DepartmentSCD2 query = new DepartmentSCD2();
-        query.setDeptId(deptId);
-        query.setIsCurrent(true);
-        return selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<>(query));
+        return selectOne(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getDeptId, deptId)
+                .eq(DepartmentSCD2::getIsCurrent, true));
     }
 
     /**
@@ -38,9 +38,9 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 当前版本部门列表
      */
     default List<DepartmentSCD2> findAllCurrent() {
-        return selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2>()
-                .eq("is_current", 1)
-                .orderByAsc("dept_id"));
+        return selectList(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getIsCurrent, true)
+                .orderByAsc(DepartmentSCD2::getDeptId));
     }
 
     /**
@@ -88,9 +88,9 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 记录数
      */
     default int countVersionOnDate(Long deptId, LocalDate effectiveDate) {
-        return Math.toIntExact(selectCount(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2>()
-                .eq("dept_id", deptId)
-                .eq("valid_from", effectiveDate)));
+        return Math.toIntExact(selectCount(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getDeptId, deptId)
+                .eq(DepartmentSCD2::getValidFrom, effectiveDate)));
     }
 
     /**
@@ -100,9 +100,9 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 历史版本列表（按生效日期降序）
      */
     default List<DepartmentSCD2> findAllVersionsByDeptId(Long deptId) {
-        return selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2>()
-                .eq("dept_id", deptId)
-                .orderByDesc("valid_from"));
+        return selectList(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getDeptId, deptId)
+                .orderByDesc(DepartmentSCD2::getValidFrom));
     }
 
     /**
@@ -112,17 +112,16 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 子部门列表
      */
     default List<DepartmentSCD2> findChildrenByParentId(Long parentId) {
-        com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2> wrapper =
-            new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2>()
-                .eq("is_current", 1);
+        LambdaQueryWrapper<DepartmentSCD2> wrapper = new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getIsCurrent, true);
 
         if (parentId == null) {
-            wrapper.isNull("parent_id");
+            wrapper.isNull(DepartmentSCD2::getParentId);
         } else {
-            wrapper.eq("parent_id", parentId);
+            wrapper.eq(DepartmentSCD2::getParentId, parentId);
         }
 
-        return selectList(wrapper.orderByAsc("dept_id"));
+        return selectList(wrapper.orderByAsc(DepartmentSCD2::getDeptId));
     }
 
     /**
@@ -131,7 +130,7 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
      * @return 当前版本部门总数
      */
     default Integer countCurrentVersions() {
-        return Math.toIntExact(selectCount(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<DepartmentSCD2>()
-                .eq("is_current", 1)));
+        return Math.toIntExact(selectCount(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getIsCurrent, true)));
     }
 }

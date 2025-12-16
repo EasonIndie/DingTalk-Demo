@@ -66,6 +66,9 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     @Autowired
     private ISyncRecordService syncRecordService;
 
+    @Autowired
+    private IDepartmentSCD2Service departmentSCD2Service;
+
     // 钉钉Workflow API客户端（懒加载）
     private volatile com.aliyun.dingtalkworkflow_1_0.Client workflowClient;
 
@@ -99,81 +102,62 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     }
 
     @Override
-    public int syncUserIds() {
-        log.info("开始同步钉钉用户ID数据");
+    public void syncOALSS(LocalDateTime startTime) {
+        log.info("开始同步OA数据，使用部门SCD2表和实时API获取用户");
 
         try {
-            // 1. 获取有效的access_token
+            // 1. 从部门SCD2表获取所有当前部门
+            List<DepartmentSCD2> departments = departmentSCD2Service.findAllCurrent();
+            log.info("从部门表获取到{}个部门", departments.size());
+
+            // 2. 获取access_token
             String accessToken = getValidAccessToken();
             if (!StringUtils.hasText(accessToken)) {
-                log.error("获取access_token失败，无法进行数据同步");
-                return 0;
+                log.error("获取access_token失败，无法进行OA数据同步");
+                return;
             }
 
-            // 2. 递归获取所有部门ID并缓存
-            Set<Long> allDeptIds = getAllDepartmentIds(accessToken);
-            if (CollectionUtils.isEmpty(allDeptIds)) {
-                log.error("获取部门ID列表为空");
-                return 0;
-            }
+            // 3. 统计信息
+            int totalDepts = 0;
+            int totalUsers = 0;
+            int totalInstances = 0;
 
-            cacheDepartmentIds(allDeptIds);
-            log.info("成功获取并缓存了{}个部门ID", allDeptIds.size());
+            // 4. 遍历每个部门，实时获取用户ID
+            for (DepartmentSCD2 dept : departments) {
+                try {
+                    // 获取部门下的所有用户ID（实时从API获取）
+                    Set<String> userIds = getUserIdsByDepartmentFromAPI(dept.getDeptId(), accessToken);
+                    if (!CollectionUtils.isEmpty(userIds)) {
+                        totalUsers += userIds.size();
+                        log.debug("部门[{}]获取到{}个用户", dept.getDeptId(), userIds.size());
 
-            // 3. 遍历所有部门获取用户ID并缓存
-            Set<String> allUserIds = new HashSet<>();
-            for (Long deptId : allDeptIds) {
-                Set<String> userIds = getUserIdsByDepartment(deptId, accessToken);
-                if (!CollectionUtils.isEmpty(userIds)) {
-                    allUserIds.addAll(userIds);
-                    log.debug("部门{}获取到{}个用户ID", deptId, userIds.size());
-                }
-            }
-
-            // 4. 缓存所有用户ID
-            cacheUserIds(allUserIds);
-
-            log.info("同步完成，总共缓存了{}个用户ID", allUserIds.size());
-            return allUserIds.size();
-
-        } catch (Exception e) {
-            log.error("同步用户ID数据时发生异常", e);
-            return 0;
-        }
-    }
-
-    @Override
-    public void syncOALSS(LocalDateTime startTime) {
-        try {
-            //从缓存获取用户id
-            log.info("开始从Redis缓存获取用户ID列表");
-            Set<Object> userIds = redisTemplate.opsForSet().members(Constants.KEY_ALL_USER_IDS);
-            if (CollectionUtils.isEmpty(userIds)) {
-                log.info("缓存中没有找到用户ID，先调用syncUserIds()方法同步数据");
-                syncUserIds();
-            }else {
-                log.info("从缓存中获取到{}个用户ID:", userIds.size());
-                userIds = redisTemplate.opsForSet().members(Constants.KEY_ALL_USER_IDS);
-            }
-            //固定userIds 单个用户用来测试
-            //userIds = Stream.of("2001051333950200").collect(Collectors.toSet());
-            for(String formId :Constants.FORM_MAP.keySet()){
-                //获取表单实例id
-                for (Object userId : userIds) {
-                    List<String> instanceIds = getFormInstantIds(formId, String.valueOf(userId), startTime);
-                    if (!CollectionUtils.isEmpty(instanceIds)) {
-                        log.info("表单ID: {}, 用户ID: {}, 从时间{}开始获取到{}个实例ID", formId, userId, startTime, instanceIds.size());
-                        //通过实例id获取表单数据并保存
-                        syncProcessInstanceDetails(instanceIds, formId);
-                    } else {
-                        log.info("表单ID: {}, 用户ID: {}, 从时间{}开始未获取到实例ID", formId, userId, startTime);
+                        // 处理每个用户的OA数据
+                        for (String formId : Constants.FORM_MAP.keySet()) {
+                            for (String userId : userIds) {
+                                List<String> instanceIds = getFormInstantIds(formId, userId, startTime);
+                                if (!CollectionUtils.isEmpty(instanceIds)) {
+                                    totalInstances += instanceIds.size();
+                                    log.info("表单ID: {}, 用户ID: {}, 从时间{}开始获取到{}个实例ID",
+                                            formId, userId, startTime, instanceIds.size());
+                                    syncProcessInstanceDetails(instanceIds, formId);
+                                }
+                            }
+                        }
                     }
+                    totalDepts++;
+
+                    // 添加API调用间隔，避免触发频率限制
+                    Thread.sleep(dingdingConfig.getApi().getApiCallInterval());
+
+                } catch (Exception e) {
+                    log.error("处理部门[{}]时发生异常: {}", dept.getDeptId(), e.getMessage(), e);
                 }
             }
 
+            log.info("OA数据同步完成 - 处理部门: {}, 用户: {}, 实例: {}", totalDepts, totalUsers, totalInstances);
 
         } catch (Exception e) {
-            log.error("从缓存获取用户ID时发生异常", e);
+            log.error("同步OA数据时发生异常", e);
         }
     }
 
@@ -544,162 +528,52 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     }
 
     /**
-     * 递归获取所有部门ID
-     *
-     * @param accessToken 访问令牌
-     * @return 所有部门ID集合
-     */
-    private Set<Long> getAllDepartmentIds(String accessToken) {
-        Set<Long> allDeptIds = new HashSet<>();
-        Set<Long> processedDeptIds = new HashSet<>();
-
-        try {
-            // 从根部门开始递归
-            recursionGetDepartmentIds(ROOT_DEPT_ID, accessToken, allDeptIds, processedDeptIds);
-        } catch (Exception e) {
-            log.error("递归获取部门ID时发生异常", e);
-        }
-
-        return allDeptIds;
-    }
-
-    /**
-     * 递归获取部门ID的核心方法
-     *
-     * @param deptId 当前部门ID
-     * @param accessToken 访问令牌
-     * @param allDeptIds 所有部门ID集合
-     * @param processedDeptIds 已处理的部门ID集合（防止重复处理）
-     */
-    private void recursionGetDepartmentIds(Long deptId, String accessToken, Set<Long> allDeptIds, Set<Long> processedDeptIds) {
-        if (deptId == null || processedDeptIds.contains(deptId)) {
-            return;
-        }
-
-        processedDeptIds.add(deptId);
-        allDeptIds.add(deptId);
-
-        try {
-            String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getDepartmentListUrl();
-            DingTalkClient client = new DefaultDingTalkClient(url);
-            OapiV2DepartmentListsubRequest request = new OapiV2DepartmentListsubRequest();
-            request.setDeptId(deptId);
-
-            OapiV2DepartmentListsubResponse response = client.execute(request, accessToken);
-
-            if (response.isSuccess() && response.getResult() != null) {
-                List<OapiV2DepartmentListsubResponse.DeptBaseResponse> departments = response.getResult();
-                if (!CollectionUtils.isEmpty(departments)) {
-                    for (OapiV2DepartmentListsubResponse.DeptBaseResponse dept : departments) {
-                        if (dept != null && dept.getDeptId() != null) {
-                            // 递归处理子部门
-                            recursionGetDepartmentIds(dept.getDeptId(), accessToken, allDeptIds, processedDeptIds);
-                        }
-                    }
-                }
-            } else {
-                log.warn("获取部门{}的子部门列表失败：{}", deptId, response.getErrmsg());
-            }
-
-        } catch (ApiException e) {
-            log.error("调用钉钉获取部门列表API失败，deptId: {}", deptId, e);
-        }
-    }
-
-    /**
-     * 获取指定部门的用户ID列表
+     * 从API获取部门下的所有用户ID（实时）
      *
      * @param deptId 部门ID
      * @param accessToken 访问令牌
      * @return 用户ID集合
+     * @throws ApiException API调用异常
      */
-    private Set<String> getUserIdsByDepartment(Long deptId, String accessToken) {
+    private Set<String> getUserIdsByDepartmentFromAPI(Long deptId, String accessToken) throws ApiException {
         Set<String> userIds = new HashSet<>();
         Long cursor = 0L;
         Long size = 50L; // 每页大小
 
-        try {
-            while (true) {
-                String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getUserListUrl();
-                DingTalkClient client = new DefaultDingTalkClient(url);
-                OapiV2UserListRequest request = new OapiV2UserListRequest();
-                request.setDeptId(deptId);
-                request.setCursor(cursor);
-                request.setSize(size);
+        String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getUserListUrl();
 
-                OapiV2UserListResponse response = client.execute(request, accessToken);
+        while (true) {
+            DingTalkClient client = new DefaultDingTalkClient(url);
+            OapiV2UserListRequest request = new OapiV2UserListRequest();
+            request.setDeptId(deptId);
+            request.setCursor(cursor);
+            request.setSize(size);
 
-                if (response.isSuccess() && response.getResult() != null) {
-                    OapiV2UserListResponse.PageResult pageResult = response.getResult();
+            OapiV2UserListResponse response = client.execute(request, accessToken);
 
-                    List<OapiV2UserListResponse.ListUserResponse> users = pageResult.getList();
-                    if (!CollectionUtils.isEmpty(users)) {
-                        for (OapiV2UserListResponse.ListUserResponse user : users) {
-                            if (user != null && StringUtils.hasText(user.getUserid())) {
-                                userIds.add(user.getUserid());
-                            }
+            if (response.isSuccess() && response.getResult() != null) {
+                OapiV2UserListResponse.PageResult pageResult = response.getResult();
+                List<OapiV2UserListResponse.ListUserResponse> users = pageResult.getList();
+
+                if (!CollectionUtils.isEmpty(users)) {
+                    for (OapiV2UserListResponse.ListUserResponse user : users) {
+                        if (user != null && StringUtils.hasText(user.getUserid())) {
+                            userIds.add(user.getUserid());
                         }
                     }
+                }
 
-                    // 检查是否还有下一页
-                    if (pageResult.getHasMore() == null || !pageResult.getHasMore()) {
-                        break;
-                    }
-
-                    cursor = pageResult.getNextCursor();
-                } else {
-                    log.warn("获取部门{}的用户列表失败：{}", deptId, response.getErrmsg());
+                if (pageResult.getHasMore() == null || !pageResult.getHasMore()) {
                     break;
                 }
+                cursor = pageResult.getNextCursor();
+            } else {
+                log.warn("获取部门{}的用户列表失败：{}", deptId, response.getErrmsg());
+                break;
             }
-
-        } catch (ApiException e) {
-            log.error("调用钉钉获取用户列表API失败，deptId: {}", deptId, e);
         }
 
         return userIds;
-    }
-
-    /**
-     * 缓存部门ID到Redis
-     *
-     * @param deptIds 部门ID集合
-     */
-    private void cacheDepartmentIds(Set<Long> deptIds) {
-        try {
-            if (!CollectionUtils.isEmpty(deptIds)) {
-                // 清空现有缓存
-                redisTemplate.delete(Constants.KEY_ALL_DEPARTMENT_IDS);
-                // 缓存新的部门ID集合
-                redisTemplate.opsForSet().add(Constants.KEY_ALL_DEPARTMENT_IDS, deptIds.toArray());
-                // 设置过期时间
-                redisTemplate.expire(Constants.KEY_ALL_DEPARTMENT_IDS, Constants.CACHE_EXPIRE_TIME, TimeUnit.SECONDS);
-                log.debug("成功缓存{}个部门ID到Redis", deptIds.size());
-            }
-        } catch (Exception e) {
-            log.error("缓存部门ID到Redis时发生异常", e);
-        }
-    }
-
-    /**
-     * 缓存用户ID到Redis
-     *
-     * @param userIds 用户ID集合
-     */
-    private void cacheUserIds(Set<String> userIds) {
-        try {
-            if (!CollectionUtils.isEmpty(userIds)) {
-                // 清空现有缓存
-                redisTemplate.delete(Constants.KEY_ALL_USER_IDS);
-                // 缓存新的用户ID集合
-                redisTemplate.opsForSet().add(Constants.KEY_ALL_USER_IDS, userIds.toArray());
-                // 设置过期时间
-                redisTemplate.expire(Constants.KEY_ALL_USER_IDS, Constants.CACHE_EXPIRE_TIME, TimeUnit.SECONDS);
-                log.debug("成功缓存{}个用户ID到Redis", userIds.size());
-            }
-        } catch (Exception e) {
-            log.error("缓存用户ID到Redis时发生异常", e);
-        }
     }
 
     /**

@@ -29,20 +29,7 @@ public class TestController {
     @Autowired
     private StatisticsService statisticsService;
 
-    /**
-     * 测试同步用户ID
-     */
-    @PostMapping("/sync-users")
-    public String syncUsers() {
-        try {
-            int count = dingTalkOAService.syncUserIds();
-            return "同步完成，共同步 " + count + " 个用户ID";
-        } catch (Exception e) {
-            log.error("同步用户ID失败", e);
-            return "同步失败: " + e.getMessage();
-        }
-    }
-
+    
     /**
      * 测试同步表单数据
      */

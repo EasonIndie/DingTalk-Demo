@@ -1,6 +1,6 @@
 package com.example.dingding.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.dingding.entity.ProcessInstance;
 import com.example.dingding.mapper.ProcessInstanceMapper;
@@ -59,8 +59,7 @@ public class ProcessInstanceServiceImpl extends ServiceImpl<ProcessInstanceMappe
 
     @Override
     public ProcessInstance getByProcessInstanceId(String processInstanceId) {
-        QueryWrapper<ProcessInstance> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("process_instance_id", processInstanceId);
-        return getOne(queryWrapper);
+        return getOne(new LambdaQueryWrapper<ProcessInstance>()
+                .eq(ProcessInstance::getProcessInstanceId, processInstanceId));
     }
 }

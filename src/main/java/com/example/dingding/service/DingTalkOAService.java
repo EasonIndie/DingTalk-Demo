@@ -14,16 +14,11 @@ import java.util.List;
 public interface DingTalkOAService {
 
     /**
-     * 同步所有用户ID到Redis
-     * 包含完整流程：
-     * 1. 获取有效的access_token
-     * 2. 递归获取所有部门ID并缓存
-     * 3. 遍历所有部门获取用户ID并缓存
+     * 同步OA表单实例数据
+     * 从部门SCD2表获取部门信息，实时从API获取用户数据
      *
-     * @return 同步的用户数量
+     * @param startTime 开始时间
      */
-    int syncUserIds();
-
     void syncOALSS(LocalDateTime startTime);
 
     /**

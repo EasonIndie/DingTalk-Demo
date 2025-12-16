@@ -3,6 +3,7 @@ package com.example.dingding.controller;
 import com.example.dingding.service.DingTalkOAService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,67 +28,44 @@ public class DingTalkController {
     @Autowired
     private DingTalkOAService dingTalkOAService;
 
+    
+
     /**
-     * 同步所有用户ID到Redis
+     * 同步OA表单实例数据
+     * 从部门SCD2表获取部门信息，实时从API获取用户数据
      *
      * @return 同步结果
      */
-    @PostMapping("/sync/users")
-    public ResponseEntity<Map<String, Object>> syncUsers() {
+    @PostMapping("/sync/oaLSS")
+    public ResponseEntity<Map<String, Object>> syncOALSS(
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime) {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            log.info("收到同步用户ID的请求");
+            log.info("收到同步OA数据的请求");
 
-            long startTime = System.currentTimeMillis();
-            int userCount = dingTalkOAService.syncUserIds();
-            long endTime = System.currentTimeMillis();
-            long costTime = endTime - startTime;
+            // 如果没有指定开始时间，使用默认时间（30天前）
+            LocalDateTime syncTime = startTime != null ? startTime : LocalDateTime.now().minusDays(30);
+
+            long start = System.currentTimeMillis();
+            dingTalkOAService.syncOALSS(syncTime);
+            long end = System.currentTimeMillis();
+            long costTime = end - start;
 
             result.put("success", true);
-            result.put("message", "同步完成");
-            result.put("userCount", userCount);
+            result.put("message", "OA数据同步完成");
+            result.put("syncStartTime", syncTime);
             result.put("costTime", costTime + "ms");
 
-            log.info("同步用户ID完成，共{}个用户，耗时{}ms", userCount, costTime);
+            log.info("OA数据同步完成，耗时{}ms", costTime);
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {
-            log.error("同步用户ID时发生异常", e);
+            log.error("同步OA数据时发生异常", e);
 
             result.put("success", false);
             result.put("message", "同步失败：" + e.getMessage());
-            result.put("userCount", 0);
-
-            return ResponseEntity.internalServerError().body(result);
-        }
-    }
-
-
-    @PostMapping("/sync/oaLSS")
-    public ResponseEntity<Map<String, Object>> syncOALSS() {
-        Map<String, Object> result = new HashMap<>();
-
-        try {
-            log.info("收到从缓存获取用户ID列表的请求");
-
-            long startTime = System.currentTimeMillis();
-            LocalDateTime testTime = LocalDateTime.of(2025, 11, 1, 0, 0, 0);
-
-            dingTalkOAService.syncOALSS(testTime);
-            long endTime = System.currentTimeMillis();
-            long costTime = endTime - startTime;
-
-            result.put("success", true);
-            result.put("costTime", costTime + "ms");
-
-            return ResponseEntity.ok(result);
-
-        } catch (Exception e) {
-            log.error("从缓存获取用户ID列表时发生异常", e);
-
-            result.put("success", false);
-            result.put("message", "获取失败：" + e.getMessage());
 
             return ResponseEntity.internalServerError().body(result);
         }
