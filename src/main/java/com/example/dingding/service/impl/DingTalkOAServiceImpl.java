@@ -13,6 +13,7 @@ import com.dingtalk.api.response.OapiV2UserListResponse;
 import com.example.dingding.config.Constants;
 import com.example.dingding.config.DingdingConfig;
 import com.example.dingding.service.DingTalkOAService;
+import com.example.dingding.dto.DepartmentDTO;
 import com.example.dingding.entity.*;
 import com.example.dingding.service.*;
 import com.taobao.api.ApiException;
@@ -999,5 +1000,94 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
         public void setOperationRecords(List<OperationRecord> operationRecords) { this.operationRecords = operationRecords; }
         public List<Task> getTasks() { return tasks; }
         public void setTasks(List<Task> tasks) { this.tasks = tasks; }
+    }
+
+    @Override
+    public List<DepartmentDTO> getAllDepartmentsWithDetails() {
+        log.info("开始获取钉钉所有部门的详细信息");
+
+        try {
+            // 1. 获取有效的access_token
+            String accessToken = getValidAccessToken();
+            if (!StringUtils.hasText(accessToken)) {
+                log.error("获取access_token失败，无法获取部门信息");
+                return Collections.emptyList();
+            }
+
+            // 2. 递归获取所有部门信息
+            List<DepartmentDTO> allDepartments = new ArrayList<>();
+            recursionGetDepartmentsWithDetails(ROOT_DEPT_ID, accessToken, allDepartments, new HashSet<>());
+
+            log.info("成功获取{}个部门的详细信息", allDepartments.size());
+            return allDepartments;
+
+        } catch (Exception e) {
+            log.error("获取钉钉部门详细信息时发生异常", e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 递归获取部门详细信息的核心方法
+     * 改进版：直接利用获取子部门API返回的信息
+     *
+     * @param deptId 当前部门ID
+     * @param accessToken 访问令牌
+     * @param allDepartments 所有部门信息集合
+     * @param processedDeptIds 已处理的部门ID集合（防止重复处理）
+     */
+    private void recursionGetDepartmentsWithDetails(Long deptId, String accessToken,
+                                                   List<DepartmentDTO> allDepartments,
+                                                   Set<Long> processedDeptIds) {
+        if (deptId == null || processedDeptIds.contains(deptId)) {
+            return;
+        }
+
+        processedDeptIds.add(deptId);
+
+        try {
+            // 根部门特殊处理：钉钉API中根部门(1)不返回详情，需要特殊处理
+            if (ROOT_DEPT_ID.equals(deptId)) {
+                DepartmentDTO rootDept = new DepartmentDTO()
+                        .setDeptId(ROOT_DEPT_ID)
+                        .setParentId(null)
+                        .setName("根部门");
+                allDepartments.add(rootDept);
+                log.debug("添加根部门: ID={}, Name={}", ROOT_DEPT_ID, "根部门");
+            }
+
+            // 获取子部门列表，这里会返回子部门的详细信息
+            String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getDepartmentListUrl();
+            DingTalkClient client = new DefaultDingTalkClient(url);
+            OapiV2DepartmentListsubRequest request = new OapiV2DepartmentListsubRequest();
+            request.setDeptId(deptId);
+
+            OapiV2DepartmentListsubResponse response = client.execute(request, accessToken);
+
+            if (response.isSuccess() && response.getResult() != null) {
+                List<OapiV2DepartmentListsubResponse.DeptBaseResponse> departments = response.getResult();
+                if (!CollectionUtils.isEmpty(departments)) {
+                    for (OapiV2DepartmentListsubResponse.DeptBaseResponse dept : departments) {
+                        if (dept != null && dept.getDeptId() != null) {
+                            // 转换为DTO并添加到列表
+                            DepartmentDTO deptDto = DepartmentDTO.fromDingTalkResponse(dept);
+                            if (deptDto != null) {
+                                allDepartments.add(deptDto);
+                                log.debug("添加部门: ID={}, Name={}, ParentId={}",
+                                         deptDto.getDeptId(), deptDto.getName(), deptDto.getParentId());
+                            }
+
+                            // 递归处理子部门
+                            recursionGetDepartmentsWithDetails(dept.getDeptId(), accessToken, allDepartments, processedDeptIds);
+                        }
+                    }
+                }
+            } else {
+                log.warn("获取部门{}的子部门列表失败：{}", deptId, response.getErrmsg());
+            }
+
+        } catch (ApiException e) {
+            log.error("调用钉钉获取部门详情API失败，deptId: {}", deptId, e);
+        }
     }
 }

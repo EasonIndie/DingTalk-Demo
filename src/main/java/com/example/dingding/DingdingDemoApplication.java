@@ -2,6 +2,7 @@ package com.example.dingding;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 钉钉数据表单实例详情获取Demo
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @version 1.0.0
  */
 @SpringBootApplication
+@EnableScheduling  // 启用定时任务调度功能
 public class DingdingDemoApplication {
 
     public static void main(String[] args) {

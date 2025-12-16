@@ -13,14 +13,13 @@ public class BaiLianAPITest {
                 // Use API Key instead of environment variables
                 .apiKey("sk-04375e566a794b4f80ca856e88fbe916")
                 .appId("b8c93d71a67e49b8af3860eaa33e95c4")
-                .bizParams(JsonUtils.parse(bizParams))
-                .prompt("输出上面问题的答案")
+                .bizParams(JsonUtils.parse(bizParams)).prompt("输出最终结果")
                 .build();
 
         Application application = new Application();
         ApplicationResult result = application.call(param);
         String text = result.getOutput().getText();
-        System.out.printf(text);
+        System.out.println(text);
         JSONObject jsonObject = MyJsonUtils.parsePossiblyWrappedJson(text);
         System.out.println(jsonObject.toString());
     }

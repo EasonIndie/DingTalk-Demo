@@ -1,6 +1,8 @@
 package com.example.dingding.service;
 
+import com.example.dingding.dto.DepartmentDTO;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 钉钉办公自动化服务接口
@@ -24,4 +26,12 @@ public interface DingTalkOAService {
 
     void syncOALSS(LocalDateTime startTime);
 
+    /**
+     * 获取钉钉所有部门的详细信息
+     * 包含部门ID、名称、父部门ID等信息
+     * 采用递归方式获取完整的组织架构
+     *
+     * @return 所有部门的详细信息列表
+     */
+    List<DepartmentDTO> getAllDepartmentsWithDetails();
 }
