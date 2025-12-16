@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.dingding.mapper.DepartmentGroupMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.example.dingding.entity.DepartmentGroup">
+        <id column="group_id" property="groupId" jdbcType="BIGINT"/>
+        <result column="dept_id" property="deptId" jdbcType="BIGINT"/>
+        <result column="group_type" property="groupType" jdbcType="VARCHAR"/>
+        <result column="parent_group_id" property="parentGroupId" jdbcType="BIGINT"/>
+        <result column="group_name" property="groupName" jdbcType="VARCHAR"/>
+        <result column="valid_from" property="validFrom" jdbcType="DATE"/>
+        <result column="valid_to" property="validTo" jdbcType="DATE"/>
+        <result column="is_current" property="isCurrent" jdbcType="BOOLEAN"/>
+        <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
+        <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <!-- 递归查询部门层级数据 -->
+    <select id="selectDepartmentHierarchy" resultMap="BaseResultMap">
+        WITH RECURSIVE dept_hierarchy AS (
+            -- 基础查询：查找"区域管理部"的直接子节点作为根节点（level=1）
+            SELECT
+                d.dept_id,
+                d.parent_id,
+                d.name,
+                1 AS level,
+                CAST(d.dept_id AS CHAR(200)) AS path,
+                d.parent_id AS original_parent_id,
+                d.dept_id AS root_dept_id,
+                d.name AS root_name
+            FROM dim_department_jy d
+            WHERE d.is_current = 1
+              AND d.parent_id = (
+                  SELECT dept_id
+                  FROM dim_department_jy
+                  WHERE is_current = 1
+                    AND name = #{rootDeptName}
+              )
+
+            UNION ALL
+
+            -- 递归查询：查找所有子部门
+            SELECT
+                child.dept_id,
+                child.parent_id,
+                child.name,
+                parent.level + 1 AS level,
+                CONCAT(parent.path, ',', child.dept_id) AS path,
+                child.parent_id AS original_parent_id,
+                parent.root_dept_id,
+                parent.root_name
+            FROM dim_department_jy child
+            INNER JOIN dept_hierarchy parent ON child.parent_id = parent.dept_id
+            WHERE child.is_current = 1
+              AND FIND_IN_SET(child.dept_id, parent.path) = 0
+        )
+        SELECT
+            h.dept_id AS group_id,  -- group_id复用dept_id
+            h.dept_id,
+            CASE
+                WHEN h.level = 1 THEN 'REGION'  -- 第一层：区域管理部的直接子节点
+                WHEN h.level = 2 THEN 'DEPARTMENT'  -- 第二层：孙节点
+                ELSE NULL  -- 第三层及以下
+            END AS group_type,
+            CASE
+                WHEN h.level = 1 THEN NULL  -- REGION节点作为根节点，parent_group_id为NULL
+                ELSE (
+                    SELECT parent_h.dept_id
+                    FROM dept_hierarchy parent_h
+                    WHERE parent_h.dept_id = h.original_parent_id
+                )
+            END AS parent_group_id,
+            h.name AS group_name,
+            CURRENT_DATE AS valid_from,
+            '9999-12-31' AS valid_to,
+            1 AS is_current
+        FROM dept_hierarchy h
+        ORDER BY h.level, h.dept_id
+    </select>
+
+    <!-- 批量插入部门统计数据 -->
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO dim_department_group_jy (
+            group_id,
+            dept_id,
+            group_type,
+            parent_group_id,
+            group_name,
+            valid_from,
+            valid_to,
+            is_current
+        ) VALUES
+        <foreach collection="groups" item="group" separator=",">
+            (
+                #{group.groupId},
+                #{group.deptId},
+                #{group.groupType, jdbcType=VARCHAR},
+                #{group.parentGroupId, jdbcType=BIGINT},
+                #{group.groupName, jdbcType=VARCHAR},
+                #{group.validFrom, jdbcType=DATE},
+                #{group.validTo, jdbcType=DATE},
+                #{group.isCurrent, jdbcType=BOOLEAN}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 清理表数据 -->
+    <update id="truncateTable">
+        TRUNCATE TABLE dim_department_group_jy
+    </update>
+
+    <!-- 查询数据分布统计 -->
+    <select id="selectDistributionStats" resultType="java.util.Map">
+        SELECT
+            group_type,
+            COUNT(*) AS count,
+            GROUP_CONCAT(group_name ORDER BY group_name SEPARATOR ', ') AS sample_names
+        FROM dim_department_group_jy
+        WHERE is_current = 1
+        GROUP BY group_type
+        ORDER BY group_type
+    </select>
+
+    <!-- 验证层级关系 -->
+    <select id="selectHierarchyValidation" resultType="java.util.Map">
+        SELECT
+            g1.group_id,
+            g1.group_name,
+            g1.group_type,
+            g2.group_name AS parent_group_name,
+            g2.group_type AS parent_group_type
+        FROM dim_department_group_jy g1
+        LEFT JOIN dim_department_group_jy g2 ON g1.parent_group_id = g2.dept_id
+        WHERE g1.is_current = 1
+        ORDER BY
+            CASE WHEN g1.group_type IS NULL THEN 3
+                 WHEN g1.group_type = 'DEPARTMENT' THEN 2
+                 WHEN g1.group_type = 'REGION' THEN 1
+                 ELSE 4
+            END,
+            g1.group_name
+    </select>
+
+    <!-- 检查根节点是否存在 -->
+    <select id="checkRootNodeExists" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM dim_department_jy
+        WHERE is_current = 1
+          AND name = #{rootDeptName}
+    </select>
+
+    <!-- 获取指定类型的部门列表 -->
+    <select id="selectByGroupType" resultMap="BaseResultMap">
+        SELECT
+            group_id,
+            dept_id,
+            group_type,
+            parent_group_id,
+            group_name,
+            valid_from,
+            valid_to,
+            is_current,
+            created_at,
+            updated_at
+        FROM dim_department_group_jy
+        WHERE is_current = 1
+        <if test="groupType != null">
+            AND group_type = #{groupType}
+        </if>
+        ORDER BY group_name
+    </select>
+
+    <!-- 获取树形结构数据（扁平化）
+         Service层会将其构建成真正的树形结构 -->
+    <select id="selectTreeStructure" resultType="java.util.Map">
+        SELECT
+            g.group_id,
+            g.dept_id,
+            g.group_name,
+            g.group_type,
+            g.parent_group_id
+        FROM dim_department_group_jy g
+        WHERE g.is_current = 1
+        ORDER BY g.group_type, g.group_name
+    </select>
+
+</mapper>
