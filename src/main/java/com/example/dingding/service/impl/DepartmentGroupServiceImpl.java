@@ -1,6 +1,8 @@
 package com.example.dingding.service.impl;
 
+import com.example.dingding.config.ProjectDepartmentConfig;
 import com.example.dingding.entity.DepartmentGroup;
+import com.example.dingding.entity.DepartmentSCD2;
 import com.example.dingding.enums.DepartmentGroupType;
 import com.example.dingding.mapper.DepartmentGroupMapper;
 import com.example.dingding.mapper.DepartmentSCD2Mapper;
@@ -31,6 +33,9 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
     @Autowired
     private DepartmentSCD2Mapper departmentSCD2Mapper;
+
+    @Autowired
+    private ProjectDepartmentConfig projectDepartmentConfig;
 
     private static final String ROOT_DEPT_NAME = "区域管理部";
 
@@ -69,98 +74,18 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         departmentGroupMapper.truncateTable();
         log.info("已清理原有数据");
 
-        // 重新生成
-        return generateDepartmentGroups();
-    }
+        // 处理区域管理部数据
+        int regionCount = generateDepartmentGroups();
+        log.info("生成区域管理部数据完成，共 {} 条", regionCount);
 
-    @Override
-    public Map<String, Object> validateAndCheck() {
-        log.info("开始验证部门统计数据");
+        // 处理项目部数据
+        int projectCount = syncProjectDepartmentGroups();
+        log.info("生成项目部数据完成，共 {} 条", projectCount);
 
-        Map<String, Object> validationResult = new HashMap<>();
-        List<String> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
+        int totalCount = regionCount + projectCount;
+        log.info("总共生成 {} 条部门统计数据", totalCount);
 
-        // 1. 检查根节点
-        if (!checkRootNodeExists(ROOT_DEPT_NAME)) {
-            errors.add("根节点 '" + ROOT_DEPT_NAME + "' 不存在");
-        } else {
-            log.info("根节点检查通过");
-        }
-
-        // 2. 获取数据分布
-        List<Map<String, Object>> distributionStats = departmentGroupMapper.selectDistributionStats();
-        validationResult.put("distribution", distributionStats);
-
-        // 统计各类别数量
-        Map<String, Integer> typeCount = new HashMap<>();
-        int totalCount = 0;
-        for (Map<String, Object> stat : distributionStats) {
-            String type = (String) stat.get("group_type");
-            Long count = (Long) stat.get("count");
-            typeCount.put(type == null ? "NULL" : type, count.intValue());
-            totalCount += count.intValue();
-        }
-
-        // 验证数据分布合理性
-        if (typeCount.get("REGION") == null || typeCount.get("REGION") == 0) {
-            warnings.add("没有找到REGION类型的数据");
-        }
-
-        validationResult.put("typeCount", typeCount);
-        validationResult.put("totalCount", totalCount);
-
-        // 3. 验证层级关系
-        List<Map<String, Object>> hierarchyValidation = departmentGroupMapper.selectHierarchyValidation();
-        validationResult.put("hierarchy", hierarchyValidation);
-
-        // 检查REGION节点的parent_group_id是否为NULL
-        long regionWithParentCount = hierarchyValidation.stream()
-            .filter(m -> "REGION".equals(m.get("group_type")) && m.get("parent_group_name") != null)
-            .count();
-
-        if (regionWithParentCount > 0) {
-            errors.add("发现 " + regionWithParentCount + " 个REGION节点的parent_group_id不为NULL");
-        }
-
-        // 4. 数据完整性检查
-        int sourceCount = departmentSCD2Mapper.countCurrentVersions();
-        int targetCount = totalCount;
-        validationResult.put("sourceCount", sourceCount);
-        validationResult.put("targetCount", targetCount);
-
-        // 注意：targetCount应该小于sourceCount，因为不包括根节点
-        if (targetCount >= sourceCount) {
-            warnings.add("目标表记录数大于等于源表，可能包含重复数据");
-        }
-
-        // 5. 获取树形结构
-        List<Map<String, Object>> treeStructure = departmentGroupMapper.selectTreeStructure();
-        validationResult.put("treeStructure", treeStructure);
-
-        // 汇总验证结果
-        validationResult.put("errors", errors);
-        validationResult.put("warnings", warnings);
-        validationResult.put("success", errors.isEmpty());
-
-        if (errors.isEmpty()) {
-            log.info("数据验证通过，共 {} 条记录", totalCount);
-        } else {
-            log.error("数据验证失败，错误数：{}，警告数：{}", errors.size(), warnings.size());
-        }
-
-        return validationResult;
-    }
-
-    @Override
-    public List<DepartmentGroup> getCurrentGroups() {
-        return departmentGroupMapper.findAllCurrent();
-    }
-
-    @Override
-    public List<DepartmentGroup> getGroupsByType(DepartmentGroupType groupType) {
-        String typeValue = groupType != null ? groupType.getCode() : null;
-        return departmentGroupMapper.selectByGroupType(typeValue);
+        return totalCount;
     }
 
     @Override
@@ -170,6 +95,172 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
         // 构建树形结构
         return buildTree(flatList);
+    }
+
+    /**
+     * 同步项目部数据
+     * 将配置的目标部门重新组织为项目部的树形结构
+     *
+     * @return 生成的记录数
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int syncProjectDepartmentGroups() {
+        log.info("开始生成项目部统计分组数据");
+
+        // 1. 查找所有项目相关部门（包含所有子级）
+        List<DepartmentSCD2> projectDepts = findProjectDepartments();
+
+        if (CollectionUtils.isEmpty(projectDepts)) {
+            log.warn("未找到任何项目相关部门数据");
+            return 0;
+        }
+
+        log.info("找到 {} 个项目相关部门", projectDepts.size());
+
+        // 2. 构建树形结构
+        List<DepartmentGroup> groupList = buildProjectDepartmentTree(projectDepts);
+
+        // 3. 批量插入数据
+        int insertedCount = departmentGroupMapper.batchInsert(groupList);
+
+        log.info("成功生成 {} 条项目部统计数据", insertedCount);
+        return insertedCount;
+    }
+
+    /**
+     * 查找所有项目相关部门（包含所有子级）
+     *
+     * @return 部门列表
+     */
+    private List<DepartmentSCD2> findProjectDepartments() {
+        // 从配置中获取目标部门列表，避免硬编码
+        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+
+        if (CollectionUtils.isEmpty(targetDeptNames)) {
+            log.error("项目部门配置为空，请检查配置文件");
+            return Collections.emptyList();
+        }
+
+        log.info("目标部门列表：{}", targetDeptNames);
+
+        // 1. 查找一级部门
+        List<DepartmentSCD2> firstLevel = departmentSCD2Mapper.findByNameIn(targetDeptNames);
+        log.info("找到 {} 个一级部门", firstLevel.size());
+
+        // 2. 递归查找所有子部门
+        List<DepartmentSCD2> allDepts = new ArrayList<>(firstLevel);
+        Set<Long> visited = new HashSet<>();
+
+        for (DepartmentSCD2 dept : firstLevel) {
+            findAllChildren(dept.getDeptId(), allDepts, visited);
+        }
+
+        log.info("总共找到 {} 个项目相关部门（包含子部门）", allDepts.size());
+        return allDepts;
+    }
+
+    /**
+     * 递归查找所有子部门
+     *
+     * @param parentId 父部门ID
+     * @param allDepts 所有部门列表
+     * @param visited 已访问的部门ID（防止循环）
+     */
+    private void findAllChildren(Long parentId, List<DepartmentSCD2> allDepts, Set<Long> visited) {
+        if (visited.contains(parentId)) {
+            return;
+        }
+        visited.add(parentId);
+
+        List<DepartmentSCD2> children = departmentSCD2Mapper.findAllChildren(parentId);
+
+        for (DepartmentSCD2 child : children) {
+            allDepts.add(child);
+            findAllChildren(child.getDeptId(), allDepts, visited);
+        }
+    }
+
+    /**
+     * 构建项目部的树形结构
+     *
+     * @param departments 部门列表
+     * @return 部门分组列表
+     */
+    private List<DepartmentGroup> buildProjectDepartmentTree(List<DepartmentSCD2> departments) {
+        List<DepartmentGroup> result = new ArrayList<>();
+
+        // 1. 创建项目部根节点（REGION类型，parent_group_id=null）
+        // 注意：项目部使用虚拟ID -1，因为不是真实部门
+        DepartmentGroup projectRoot = new DepartmentGroup();
+        projectRoot.setGroupId(-1L);
+        projectRoot.setDeptId(-1L);
+        projectRoot.setGroupName(projectDepartmentConfig.getGroupName());
+        projectRoot.setGroupType(DepartmentGroupType.REGION);
+        projectRoot.setParentGroupId(null);  // REGION的父节点为null
+        projectRoot.setCurrentVersion(true);
+        projectRoot.setValidFrom(LocalDate.now());
+        projectRoot.setValidTo(LocalDate.of(9999, 12, 31));
+        result.add(projectRoot);
+
+        // 2. 构建部门映射
+        Map<Long, DepartmentSCD2> deptMap = departments.stream()
+                .collect(Collectors.toMap(DepartmentSCD2::getDeptId, d -> d));
+
+        // 3. 从配置中获取目标部门列表（避免硬编码）
+        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+        List<DepartmentSCD2> firstLevel = departments.stream()
+                .filter(d -> targetDeptNames.contains(d.getName()))
+                .collect(Collectors.toList());
+
+        // 4. 处理一级部门（DEPARTMENT类型，parent为项目部）
+        for (DepartmentSCD2 dept : firstLevel) {
+            DepartmentGroup group = new DepartmentGroup();
+            group.setGroupId(dept.getDeptId());      // 使用真实的dept_id
+            group.setDeptId(dept.getDeptId());       // 使用真实的dept_id
+            group.setGroupName(dept.getName());
+            group.setGroupType(DepartmentGroupType.DEPARTMENT);
+            group.setParentGroupId(-1L);             // 父节点指向项目部（虚拟ID -1）
+            group.setCurrentVersion(true);
+            group.setValidFrom(LocalDate.now());
+            group.setValidTo(LocalDate.of(9999, 12, 31));
+            result.add(group);
+
+            // 5. 递归处理子部门（group_type=null，层级不限）
+            // 从DEPARTMENT级别开始递归查找所有子级
+            buildChildGroups(dept.getDeptId(), deptMap, result);
+        }
+
+        return result;
+    }
+
+    /**
+     * 递归构建子部门树
+     *
+     * @param parentId 父部门ID
+     * @param deptMap 所有部门映射
+     * @param result 结果列表
+     */
+    private void buildChildGroups(Long parentId, Map<Long, DepartmentSCD2> deptMap,
+                                List<DepartmentGroup> result) {
+        // parentId是真实的父部门ID，从dim_department_jy表获取
+        for (DepartmentSCD2 dept : deptMap.values()) {
+            if (parentId.equals(dept.getParentId())) {
+                // 子部门的group_type为null
+                DepartmentGroup group = new DepartmentGroup();
+                group.setGroupId(dept.getDeptId());  // 使用真实的dept_id
+                group.setDeptId(dept.getDeptId());   // 使用真实的dept_id
+                group.setGroupName(dept.getName());
+                group.setGroupType(null);            // 子部门group_type为null
+                group.setParentGroupId(dept.getParentId());  // 指向真实的父部门ID
+                group.setCurrentVersion(true);
+                group.setValidFrom(LocalDate.now());
+                group.setValidTo(LocalDate.of(9999, 12, 31));
+                result.add(group);
+
+                // 继续递归处理下级
+                buildChildGroups(dept.getDeptId(), deptMap, result);
+            }
+        }
     }
 
     /**
@@ -297,48 +388,13 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         }
     }
 
-    @Override
-    public DepartmentGroup findByDeptId(Long deptId) {
-        return departmentGroupMapper.findCurrentByDeptId(deptId);
-    }
-
-    @Override
-    public Map<String, Object> getDistributionStats() {
-        List<Map<String, Object>> distribution = departmentGroupMapper.selectDistributionStats();
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("distribution", distribution);
-
-        // 按类型统计
-        Map<String, Long> typeStats = distribution.stream()
-            .collect(Collectors.toMap(
-                m -> (String) m.get("group_type"),
-                m -> (Long) m.get("count")
-            ));
-
-        result.put("typeStats", typeStats);
-        result.put("totalCount", typeStats.values().stream().mapToLong(Long::longValue).sum());
-
-        return result;
-    }
-
-    @Override
-    public boolean checkRootNodeExists(String rootDeptName) {
+    /**
+     * 检查根节点是否存在
+     *
+     * @param rootDeptName 根部门名称
+     * @return 是否存在
+     */
+    private boolean checkRootNodeExists(String rootDeptName) {
         return departmentGroupMapper.checkRootNodeExists(rootDeptName);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int refreshDepartmentGroup(Long deptId) {
-        log.info("刷新部门 {} 的统计分组数据", deptId);
-
-        // 这里可以实现增量更新逻辑
-        // 当前实现是先清理再生成，后续可以优化为只更新受影响的分支
-
-        // 1. 删除该部门及其所有子部门的数据
-        // 2. 重新生成这些部门的数据
-
-        log.info("当前使用全量刷新策略");
-        return truncateAndRegenerate();
     }
 }

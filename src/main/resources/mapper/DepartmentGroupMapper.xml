@@ -110,65 +110,12 @@
         TRUNCATE TABLE dim_department_group_jy
     </update>
 
-    <!-- 查询数据分布统计 -->
-    <select id="selectDistributionStats" resultType="java.util.Map">
-        SELECT
-            group_type,
-            COUNT(*) AS count,
-            GROUP_CONCAT(group_name ORDER BY group_name SEPARATOR ', ') AS sample_names
-        FROM dim_department_group_jy
-        WHERE is_current = 1
-        GROUP BY group_type
-        ORDER BY group_type
-    </select>
-
-    <!-- 验证层级关系 -->
-    <select id="selectHierarchyValidation" resultType="java.util.Map">
-        SELECT
-            g1.group_id,
-            g1.group_name,
-            g1.group_type,
-            g2.group_name AS parent_group_name,
-            g2.group_type AS parent_group_type
-        FROM dim_department_group_jy g1
-        LEFT JOIN dim_department_group_jy g2 ON g1.parent_group_id = g2.dept_id
-        WHERE g1.is_current = 1
-        ORDER BY
-            CASE WHEN g1.group_type IS NULL THEN 3
-                 WHEN g1.group_type = 'DEPARTMENT' THEN 2
-                 WHEN g1.group_type = 'REGION' THEN 1
-                 ELSE 4
-            END,
-            g1.group_name
-    </select>
-
     <!-- 检查根节点是否存在 -->
     <select id="checkRootNodeExists" resultType="boolean">
         SELECT COUNT(*) > 0
         FROM dim_department_jy
         WHERE is_current = 1
           AND name = #{rootDeptName}
-    </select>
-
-    <!-- 获取指定类型的部门列表 -->
-    <select id="selectByGroupType" resultMap="BaseResultMap">
-        SELECT
-            group_id,
-            dept_id,
-            group_type,
-            parent_group_id,
-            group_name,
-            valid_from,
-            valid_to,
-            is_current,
-            created_at,
-            updated_at
-        FROM dim_department_group_jy
-        WHERE is_current = 1
-        <if test="groupType != null">
-            AND group_type = #{groupType}
-        </if>
-        ORDER BY group_name
     </select>
 
     <!-- 获取树形结构数据（扁平化）

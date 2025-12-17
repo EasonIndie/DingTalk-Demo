@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.example.dingding.entity.DepartmentSCD2;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -19,6 +21,56 @@ import java.util.List;
  */
 @Mapper
 public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
+
+    /**
+     * 根据部门名称列表查找当前版本部门
+     *
+     * @param names 部门名称列表
+     * @return 部门列表
+     */
+    default List<DepartmentSCD2> findByNameIn(@Param("names") List<String> names) {
+        if (names == null || names.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DepartmentSCD2>()
+                .in(DepartmentSCD2::getName, names)
+                .eq(DepartmentSCD2::getIsCurrent, true)
+                .orderByAsc(DepartmentSCD2::getDeptId));
+    }
+
+    /**
+     * 递归查找指定部门的所有子部门（当前版本）
+     *
+     * @param parentId 父部门ID
+     * @return 所有子部门列表
+     */
+    @Select("WITH RECURSIVE dept_tree AS (" +
+            "    SELECT dept_id, name, parent_id, 1 AS level " +
+            "    FROM dim_department_jy " +
+            "    WHERE dept_id = #{parentId} AND is_current = 1 " +
+            "    " +
+            "    UNION ALL " +
+            "    " +
+            "    SELECT d.dept_id, d.name, d.parent_id, dt.level + 1 " +
+            "    FROM dim_department_jy d " +
+            "    INNER JOIN dept_tree dt ON d.parent_id = dt.dept_id " +
+            "    WHERE d.is_current = 1 " +
+            ") " +
+            "SELECT d.* FROM dim_department_jy d " +
+            "INNER JOIN dept_tree t ON d.dept_id = t.dept_id " +
+            "WHERE d.dept_id != #{parentId} AND d.is_current = 1 " +
+            "ORDER BY d.dept_id")
+    List<DepartmentSCD2> findAllChildren(@Param("parentId") Long parentId);
+
+    /**
+     * 统计当前版本部门总数
+     *
+     * @return 当前版本部门总数
+     */
+    default Integer countCurrentVersions() {
+        return Math.toIntExact(selectCount(new LambdaQueryWrapper<DepartmentSCD2>()
+                .eq(DepartmentSCD2::getIsCurrent, true)));
+    }
 
     /**
      * 查找部门的当前版本
@@ -122,15 +174,5 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
         }
 
         return selectList(wrapper.orderByAsc(DepartmentSCD2::getDeptId));
-    }
-
-    /**
-     * 统计当前版本部门总数
-     *
-     * @return 当前版本部门总数
-     */
-    default Integer countCurrentVersions() {
-        return Math.toIntExact(selectCount(new LambdaQueryWrapper<DepartmentSCD2>()
-                .eq(DepartmentSCD2::getIsCurrent, true)));
     }
 }

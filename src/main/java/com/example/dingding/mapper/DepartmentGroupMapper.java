@@ -1,12 +1,10 @@
 package com.example.dingding.mapper;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.example.dingding.entity.DepartmentGroup;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -46,38 +44,6 @@ public interface DepartmentGroupMapper extends BaseMapper<DepartmentGroup> {
     int batchInsert(@Param("groups") List<DepartmentGroup> groups);
 
     /**
-     * 查询当前版本的数据分布
-     * 按group_type统计数量
-     *
-     * @return 统计结果列表
-     */
-    List<Map<String, Object>> selectDistributionStats();
-
-    /**
-     * 验证层级关系
-     * 查询parent-child关系是否正确
-     *
-     * @return 层级关系列表
-     */
-    List<Map<String, Object>> selectHierarchyValidation();
-
-    /**
-     * 检查根节点是否存在
-     *
-     * @param rootDeptName 根部门名称
-     * @return 是否存在
-     */
-    boolean checkRootNodeExists(@Param("rootDeptName") String rootDeptName);
-
-    /**
-     * 获取指定类型的部门列表
-     *
-     * @param groupType 部门类型
-     * @return 部门列表
-     */
-    List<DepartmentGroup> selectByGroupType(@Param("groupType") String groupType);
-
-    /**
      * 获取树形结构数据（扁平化）
      * Service层会将其构建成真正的树形结构
      *
@@ -86,41 +52,10 @@ public interface DepartmentGroupMapper extends BaseMapper<DepartmentGroup> {
     List<Map<String, Object>> selectTreeStructure();
 
     /**
-     * 查找部门的当前版本
+     * 检查根节点是否存在
      *
-     * @param deptId 部门ID
-     * @return 当前版本记录，如果不存在返回null
+     * @param rootDeptName 根部门名称
+     * @return 是否存在
      */
-    default DepartmentGroup findCurrentByDeptId(Long deptId) {
-        return selectOne(
-            new LambdaQueryWrapper<DepartmentGroup>()
-                .eq(DepartmentGroup::getDeptId, deptId)
-                .eq(DepartmentGroup::getIsCurrent, true)
-        );
-    }
-
-    /**
-     * 查找所有当前版本的部门分组
-     *
-     * @return 当前版本部门分组列表
-     */
-    default List<DepartmentGroup> findAllCurrent() {
-        return selectList(
-            new LambdaQueryWrapper<DepartmentGroup>()
-                .eq(DepartmentGroup::getIsCurrent, true)
-                .orderByAsc(DepartmentGroup::getDeptId)
-        );
-    }
-
-    /**
-     * 统计当前版本分组总数
-     *
-     * @return 当前版本分组总数
-     */
-    default Integer countCurrentVersions() {
-        return Math.toIntExact(selectCount(
-            new LambdaQueryWrapper<DepartmentGroup>()
-                .eq(DepartmentGroup::getIsCurrent, true)
-        ));
-    }
+    boolean checkRootNodeExists(@Param("rootDeptName") String rootDeptName);
 }

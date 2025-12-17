@@ -86,6 +86,17 @@ dingding:
     # 部门列表缓存时间（秒）
     department-cache-duration: 3600
 
+# 项目部配置
+project:
+  department:
+    group-name: "项目部"
+    target-departments:
+      - "养老事业部"
+      - "口腔项目部"
+      - "理疗项目部"
+      - "产康项目部"
+      - "健康管理部"
+
 # 日志配置
 logging:
   level:
