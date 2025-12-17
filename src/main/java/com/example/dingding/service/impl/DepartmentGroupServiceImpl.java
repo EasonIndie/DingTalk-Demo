@@ -75,17 +75,17 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         log.info("已清理原有数据");
 
         // 处理区域管理部数据
-        int regionCount = generateDepartmentGroups();
-        log.info("生成区域管理部数据完成，共 {} 条", regionCount);
+//        int regionCount = generateDepartmentGroups();
+//        log.info("生成区域管理部数据完成，共 {} 条", regionCount);
 
         // 处理项目部数据
         int projectCount = syncProjectDepartmentGroups();
         log.info("生成项目部数据完成，共 {} 条", projectCount);
 
-        int totalCount = regionCount + projectCount;
-        log.info("总共生成 {} 条部门统计数据", totalCount);
+//        int totalCount = regionCount + projectCount;
+//        log.info("总共生成 {} 条部门统计数据", totalCount);
 
-        return totalCount;
+        return projectCount;
     }
 
     @Override
@@ -147,39 +147,47 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         List<DepartmentSCD2> firstLevel = departmentSCD2Mapper.findByNameIn(targetDeptNames);
         log.info("找到 {} 个一级部门", firstLevel.size());
 
-        // 2. 递归查找所有子部门
+        // 打印一级部门信息
+        firstLevel.forEach(dept ->
+            log.info("  一级部门: {} (ID: {})", dept.getName(), dept.getDeptId()));
+
+        // 2. 查找所有子部门（SQL已经使用递归CTE，不需要Java再递归）
         List<DepartmentSCD2> allDepts = new ArrayList<>(firstLevel);
-        Set<Long> visited = new HashSet<>();
+        Set<Long> existingIds = new HashSet<>();
+
+        // 先添加一级部门的ID到已存在集合
+        firstLevel.forEach(dept -> existingIds.add(dept.getDeptId()));
 
         for (DepartmentSCD2 dept : firstLevel) {
-            findAllChildren(dept.getDeptId(), allDepts, visited);
+            List<DepartmentSCD2> children = departmentSCD2Mapper.findAllChildren(dept.getDeptId());
+            log.info("部门 {} ({}) 有 {} 个子部门", dept.getName(), dept.getDeptId(), children.size());
+
+            for (DepartmentSCD2 child : children) {
+                // 跳过已存在的部门（防止重复）
+                if (!existingIds.contains(child.getDeptId())) {
+                    allDepts.add(child);
+                    existingIds.add(child.getDeptId());
+                    log.debug("添加子部门: {} (ID: {}, 父ID: {})",
+                        child.getName(), child.getDeptId(), child.getParentId());
+                } else {
+                    log.warn("部门 {} (ID: {}) 已存在，跳过",
+                        child.getName(), child.getDeptId());
+                }
+            }
         }
 
         log.info("总共找到 {} 个项目相关部门（包含子部门）", allDepts.size());
+
+        // 打印所有收集到的部门，帮助调试
+        log.info("收集到的部门列表：");
+        allDepts.forEach(dept ->
+            log.info("  ID: {}, 名称: {}, 父ID: {}",
+                dept.getDeptId(), dept.getName(), dept.getParentId()));
+
         return allDepts;
     }
 
-    /**
-     * 递归查找所有子部门
-     *
-     * @param parentId 父部门ID
-     * @param allDepts 所有部门列表
-     * @param visited 已访问的部门ID（防止循环）
-     */
-    private void findAllChildren(Long parentId, List<DepartmentSCD2> allDepts, Set<Long> visited) {
-        if (visited.contains(parentId)) {
-            return;
-        }
-        visited.add(parentId);
-
-        List<DepartmentSCD2> children = departmentSCD2Mapper.findAllChildren(parentId);
-
-        for (DepartmentSCD2 child : children) {
-            allDepts.add(child);
-            findAllChildren(child.getDeptId(), allDepts, visited);
-        }
-    }
-
+  
     /**
      * 构建项目部的树形结构
      *
@@ -203,8 +211,41 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         result.add(projectRoot);
 
         // 2. 构建部门映射
-        Map<Long, DepartmentSCD2> deptMap = departments.stream()
-                .collect(Collectors.toMap(DepartmentSCD2::getDeptId, d -> d));
+        log.info("开始构建部门映射，共 {} 个部门", departments.size());
+        Map<Long, DepartmentSCD2> deptMap;
+        try {
+            deptMap = departments.stream()
+                    .collect(Collectors.toMap(DepartmentSCD2::getDeptId, d -> d));
+            log.info("部门映射构建成功，共 {} 个唯一部门", deptMap.size());
+        } catch (IllegalStateException e) {
+            log.error("构建部门映射时出现重复键异常！", e);
+
+            // 找出重复的部门
+            Map<Long, Integer> countMap = new HashMap<>();
+            Set<Long> duplicateIds = new HashSet<>();
+
+            for (DepartmentSCD2 dept : departments) {
+                long count = countMap.merge(dept.getDeptId(), 1, Integer::sum);
+                if (count > 1) {
+                    duplicateIds.add(dept.getDeptId());
+                }
+            }
+
+            log.error("发现 {} 个重复的部门ID", duplicateIds.size());
+
+            // 对每个重复的部门ID，打印详细信息
+            for (Long duplicateId : duplicateIds) {
+                log.error("部门ID {} 重复出现:", duplicateId);
+                departments.stream()
+                    .filter(d -> d.getDeptId().equals(duplicateId))
+                    .forEach(d -> {
+                        log.error("  - ID: {}, 名称: {}, 父ID: {}",
+                            d.getDeptId(), d.getName(), d.getParentId());
+                    });
+            }
+
+            throw e;
+        }
 
         // 3. 从配置中获取目标部门列表（避免硬编码）
         List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
@@ -396,5 +437,44 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      */
     private boolean checkRootNodeExists(String rootDeptName) {
         return departmentGroupMapper.checkRootNodeExists(rootDeptName);
+    }
+
+    /**
+     * 查找部门在查找路径中的位置
+     * 返回格式：目标部门名称 > ... > 当前部门名称
+     *
+     * @param departments 所有部门列表
+     * @param deptId 要查找的部门ID
+     * @return 部门的查找路径
+     */
+    private String findParentPath(List<DepartmentSCD2> departments, Long deptId) {
+        // 查找所有目标部门作为可能的起点
+        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+
+        // 创建部门ID到部门的映射
+        Map<Long, DepartmentSCD2> deptMap = departments.stream()
+            .collect(Collectors.toMap(DepartmentSCD2::getDeptId, d -> d));
+
+        List<String> path = new ArrayList<>();
+        Long currentId = deptId;
+
+        // 向上追溯，直到找到目标部门或根节点
+        while (currentId != null) {
+            DepartmentSCD2 currentDept = deptMap.get(currentId);
+            if (currentDept == null) {
+                break;
+            }
+
+            path.add(0, currentDept.getName());
+
+            // 如果是目标部门，停止查找
+            if (targetDeptNames.contains(currentDept.getName())) {
+                break;
+            }
+
+            currentId = currentDept.getParentId();
+        }
+
+        return String.join(" > ", path);
     }
 }
