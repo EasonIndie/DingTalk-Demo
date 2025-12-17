@@ -197,11 +197,11 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
                 ((Number) item.get("parent_group_id")).longValue() : null;
 
             // 构建节点
-            node.put("id", groupId);
+            node.put("groupId", groupId);
             node.put("deptId", deptId);
-            node.put("name", groupName);
-            node.put("type", groupType);
-            node.put("parentId", parentGroupId);
+            node.put("groupName", groupName);
+            node.put("groupType", groupType);
+            node.put("parentGroupId", parentGroupId);
 
             // 添加额外属性
             node.put("isRoot", parentGroupId == null);
@@ -218,7 +218,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         // 第二遍：建立父子关系
         // 简化：因为group_id和dept_id相同，parent_group_id直接就是父节点的ID
         for (Map<String, Object> node : nodeMap.values()) {
-            Long parentId = (Long) node.get("parentId");
+            Long parentId = (Long) node.get("parentGroupId");
 
             if (parentId == null) {
                 // 根节点
@@ -256,10 +256,10 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
         // 按type和name排序
         nodes.sort((a, b) -> {
-            String typeA = (String) a.get("type");
-            String typeB = (String) b.get("type");
-            String nameA = (String) a.get("name");
-            String nameB = (String) b.get("name");
+            String typeA = (String) a.get("groupType");
+            String typeB = (String) b.get("groupType");
+            String nameA = (String) a.get("groupName");
+            String nameB = (String) b.get("groupName");
 
             // REGION -> DEPARTMENT -> NULL
             int typeOrderA = getTypeOrder(typeA);
