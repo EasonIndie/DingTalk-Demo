@@ -4,7 +4,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-public class Constants {
+public class JyOaConstants {
 
     //表单map
     public static final Map<String,String> FORM_MAP ;
@@ -15,16 +15,6 @@ public class Constants {
         map.put("PROC-241823B3-6CC4-488F-B9CD-6AFB2AE17845", "测试精益");
         FORM_MAP = Collections.unmodifiableMap(map);
     }
-
-    /**
-     * 3个月的毫秒数，用于时间拆分计算
-     */
-    public static final long THREE_MONTHS_MILLIS = 90L * 24 * 60 * 60 * 1000;
-
-    /**
-     * 默认API调用间隔（毫秒）
-     */
-    public static final long DEFAULT_API_CALL_INTERVAL = 100L;
 
     /**
      * 默认最大时间拆分数量

@@ -10,7 +10,7 @@ import com.dingtalk.api.request.OapiV2UserListRequest;
 import com.dingtalk.api.response.OapiV2DepartmentListsubResponse;
 import com.dingtalk.api.response.OapiGettokenResponse;
 import com.dingtalk.api.response.OapiV2UserListResponse;
-import com.example.dingding.config.Constants;
+import com.example.dingding.config.JyOaConstants;
 import com.example.dingding.config.DingdingConfig;
 import com.example.dingding.service.DingTalkOAService;
 import com.example.dingding.dto.DepartmentDTO;
@@ -19,7 +19,6 @@ import com.example.dingding.service.*;
 import com.taobao.api.ApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -27,8 +26,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
 
 /**
  * 钉钉办公自动化服务实现类
@@ -48,8 +46,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     @Autowired
     private DingdingConfig dingdingConfig;
 
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
+    //@Autowired
+    //private RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
     private IProcessInstanceService processInstanceService;
@@ -132,7 +130,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                         log.debug("部门[{}]获取到{}个用户", dept.getDeptId(), userIds.size());
 
                         // 处理每个用户的OA数据
-                        for (String formId : Constants.FORM_MAP.keySet()) {
+                        for (String formId : JyOaConstants.FORM_MAP.keySet()) {
                             for (String userId : userIds) {
                                 List<String> instanceIds = getFormInstantIds(formId, userId, startTime);
                                 if (!CollectionUtils.isEmpty(instanceIds)) {
@@ -181,8 +179,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             currentStart = currentEnd;
 
             // 安全防护：最多拆分50个时间段，防止异常情况
-            if (ranges.size() > Constants.DEFAULT_MAX_TIME_SPLITS) {
-                log.warn("时间拆分超过{}个时间段，强制停止拆分", Constants.DEFAULT_MAX_TIME_SPLITS);
+            if (ranges.size() > JyOaConstants.DEFAULT_MAX_TIME_SPLITS) {
+                log.warn("时间拆分超过{}个时间段，强制停止拆分", JyOaConstants.DEFAULT_MAX_TIME_SPLITS);
                 break;
             }
         }
@@ -473,10 +471,12 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
      *
      * @return access_token
      */
+    private String dingdingAppToken;
     private String getValidAccessToken() {
         try {
             // 先从Redis缓存获取
-            String cachedToken = (String) redisTemplate.opsForValue().get(TOKEN_CACHE_KEY);
+            //String cachedToken = (String) redisTemplate.opsForValue().get(TOKEN_CACHE_KEY);
+            String cachedToken = dingdingAppToken;
             if (StringUtils.hasText(cachedToken)) {
                 log.debug("从Redis缓存获取到access_token");
                 return cachedToken;
@@ -512,8 +512,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
 
                 // 缓存到Redis，设置过期时间
                 long expireTime = dingdingConfig.getToken().getCacheDuration(); // 转换为秒
-                redisTemplate.opsForValue().set(TOKEN_CACHE_KEY, accessToken, expireTime, TimeUnit.SECONDS);
-
+                //redisTemplate.opsForValue().set(TOKEN_CACHE_KEY, accessToken, expireTime, TimeUnit.SECONDS);
+                dingdingAppToken = accessToken;//先放到本地
                 log.info("成功获取并缓存access_token，过期时间{}秒", expireTime);
                 return accessToken;
             } else {

@@ -22,34 +22,6 @@ public class FormComponentValueServiceImpl extends ServiceImpl<FormComponentValu
         implements IFormComponentValueService {
 
     @Override
-    public FormComponentValue getByProcessInstanceAndComponentName(String processInstanceId, String componentName) {
-        return baseMapper.selectByProcessInstanceAndComponentName(processInstanceId, componentName);
-    }
-
-    @Override
-    public List<FormComponentValue> listByProcessInstanceIdsAndComponentName(List<String> processInstanceIds, String componentName) {
-        if (processInstanceIds == null || processInstanceIds.isEmpty()) {
-            return new ArrayList<>();
-        }
-        return baseMapper.selectByProcessInstanceIdsAndComponentName(processInstanceIds, componentName);
-    }
-
-    @Override
-    public List<FormComponentValueMapper.ImprovementLevelStats> getImprovementLevelStats(String startTime, String endTime) {
-        return baseMapper.selectImprovementLevelStats(startTime, endTime);
-    }
-
-    @Override
-    public List<FormComponentValueMapper.ProposalCategoryStats> getProposalCategoryStats(String startTime, String endTime) {
-        return baseMapper.selectProposalCategoryStats(startTime, endTime);
-    }
-
-    @Override
-    public List<FormComponentValueMapper.EconomicBenefitStats> getEconomicBenefitStats(String startTime, String endTime) {
-        return baseMapper.selectEconomicBenefitStats(startTime, endTime);
-    }
-
-    @Override
     public List<FormComponentValue> listByProcessInstanceId(String processInstanceId) {
         if (processInstanceId == null || processInstanceId.trim().isEmpty()) {
             return new ArrayList<>();
