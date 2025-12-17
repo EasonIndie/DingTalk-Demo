@@ -97,6 +97,19 @@ project:
       - "产康项目部"
       - "健康管理部"
 
+# 总部配置
+headquarter:
+  department:
+    group-name: "总部"
+    target-departments:
+      - "财务中心"
+      - "信息中心"
+      - "营销中心"
+      - "医疗管理中心"
+      - "审计部"
+      - "人力行政中心"
+      - "供应中心"
+
 # 日志配置
 logging:
   level:

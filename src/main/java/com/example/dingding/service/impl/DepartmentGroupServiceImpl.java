@@ -1,5 +1,6 @@
 package com.example.dingding.service.impl;
 
+import com.example.dingding.config.HeadquarterDepartmentConfig;
 import com.example.dingding.config.ProjectDepartmentConfig;
 import com.example.dingding.entity.DepartmentGroup;
 import com.example.dingding.entity.DepartmentSCD2;
@@ -36,6 +37,9 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
     @Autowired
     private ProjectDepartmentConfig projectDepartmentConfig;
+
+    @Autowired
+    private HeadquarterDepartmentConfig headquarterDepartmentConfig;
 
     private static final String ROOT_DEPT_NAME = "区域管理部";
 
@@ -75,17 +79,21 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         log.info("已清理原有数据");
 
         // 处理区域管理部数据
-//        int regionCount = generateDepartmentGroups();
-//        log.info("生成区域管理部数据完成，共 {} 条", regionCount);
+        int regionCount = generateDepartmentGroups();
+        log.info("生成区域管理部数据完成，共 {} 条", regionCount);
 
         // 处理项目部数据
         int projectCount = syncProjectDepartmentGroups();
         log.info("生成项目部数据完成，共 {} 条", projectCount);
 
-//        int totalCount = regionCount + projectCount;
-//        log.info("总共生成 {} 条部门统计数据", totalCount);
+        //处理总部数据
+        int headquarterCount = syncHeadquarterDepartmentGroups();
+        log.info("生成总部数据完成，共 {} 条", headquarterCount);
 
-        return projectCount;
+        int totalCount = regionCount + projectCount + headquarterCount;
+        log.info("总共生成 {} 条部门统计数据", totalCount);
+
+        return totalCount;
     }
 
     @Override
@@ -124,6 +132,36 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         int insertedCount = departmentGroupMapper.batchInsert(groupList);
 
         log.info("成功生成 {} 条项目部统计数据", insertedCount);
+        return insertedCount;
+    }
+
+    /**
+     * 同步总部数据
+     * 将配置的目标部门重新组织为总部的树形结构
+     *
+     * @return 生成的记录数
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public int syncHeadquarterDepartmentGroups() {
+        log.info("开始生成总部统计分组数据");
+
+        // 1. 查找所有总部相关部门（包含所有子级）
+        List<DepartmentSCD2> headquarterDepts = findHeadquarterDepartments();
+
+        if (CollectionUtils.isEmpty(headquarterDepts)) {
+            log.warn("未找到任何总部相关部门数据");
+            return 0;
+        }
+
+        log.info("找到 {} 个总部相关部门", headquarterDepts.size());
+
+        // 2. 构建树形结构
+        List<DepartmentGroup> groupList = buildHeadquarterDepartmentTree(headquarterDepts);
+
+        // 3. 批量插入数据
+        int insertedCount = departmentGroupMapper.batchInsert(groupList);
+
+        log.info("成功生成 {} 条总部统计数据", insertedCount);
         return insertedCount;
     }
 
@@ -187,7 +225,68 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         return allDepts;
     }
 
-  
+    /**
+     * 查找所有总部相关部门（包含所有子级）
+     *
+     * @return 部门列表
+     */
+    private List<DepartmentSCD2> findHeadquarterDepartments() {
+        // 从配置中获取目标部门列表
+        List<String> targetDeptNames = headquarterDepartmentConfig.getTargetDepartments();
+
+        if (CollectionUtils.isEmpty(targetDeptNames)) {
+            log.error("总部部门配置为空，请检查配置文件");
+            return Collections.emptyList();
+        }
+
+        log.info("总部目标部门列表：{}", targetDeptNames);
+
+        // 1. 查找一级部门
+        List<DepartmentSCD2> firstLevel = departmentSCD2Mapper.findByNameIn(targetDeptNames);
+        log.info("找到 {} 个总部一级部门", firstLevel.size());
+
+        // 打印一级部门信息
+        firstLevel.forEach(dept ->
+            log.info("  一级部门: {} (ID: {})", dept.getName(), dept.getDeptId()));
+
+        // 2. 查找所有子部门（重要：SQL已经使用递归CTE，返回所有层级子部门）
+        List<DepartmentSCD2> allDepts = new ArrayList<>(firstLevel);
+        Set<Long> existingIds = new HashSet<>();
+
+        // 先添加一级部门的ID到已存在集合
+        firstLevel.forEach(dept -> existingIds.add(dept.getDeptId()));
+
+        for (DepartmentSCD2 dept : firstLevel) {
+            // SQL查询已通过递归CTE返回所有层级的子部门
+            List<DepartmentSCD2> children = departmentSCD2Mapper.findAllChildren(dept.getDeptId());
+            log.info("部门 {} ({}) 有 {} 个子部门", dept.getName(), dept.getDeptId(), children.size());
+
+            for (DepartmentSCD2 child : children) {
+                // 使用existingIds去重，避免重复添加
+                if (!existingIds.contains(child.getDeptId())) {
+                    allDepts.add(child);
+                    existingIds.add(child.getDeptId());
+                    log.debug("添加子部门: {} (ID: {}, 父ID: {})",
+                        child.getName(), child.getDeptId(), child.getParentId());
+                } else {
+                    log.warn("部门 {} (ID: {}) 已存在，跳过",
+                        child.getName(), child.getDeptId());
+                }
+            }
+        }
+
+        log.info("总共找到 {} 个总部相关部门（包含子部门）", allDepts.size());
+
+        // 打印所有收集到的部门，帮助调试
+        log.info("收集到的部门列表：");
+        allDepts.forEach(dept ->
+            log.info("  ID: {}, 名称: {}, 父ID: {}",
+                dept.getDeptId(), dept.getName(), dept.getParentId()));
+
+        return allDepts;
+    }
+
+
     /**
      * 构建项目部的树形结构
      *
@@ -300,6 +399,107 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
                 // 继续递归处理下级
                 buildChildGroups(dept.getDeptId(), deptMap, result);
+            }
+        }
+    }
+
+    /**
+     * 构建总部的树形结构
+     *
+     * @param departments 部门列表
+     * @return 部门分组列表
+     */
+    private List<DepartmentGroup> buildHeadquarterDepartmentTree(List<DepartmentSCD2> departments) {
+        List<DepartmentGroup> result = new ArrayList<>();
+
+        // 1. 创建总部根节点（REGION类型，parent_group_id=null）
+        // 使用虚拟ID -2，避免与项目部（-1）冲突
+        DepartmentGroup headquarterRoot = new DepartmentGroup();
+        headquarterRoot.setGroupId(-2L);
+        headquarterRoot.setDeptId(-2L);
+        headquarterRoot.setGroupName(headquarterDepartmentConfig.getGroupName());
+        headquarterRoot.setGroupType(DepartmentGroupType.REGION);
+        headquarterRoot.setParentGroupId(null);  // REGION的父节点为null
+        headquarterRoot.setCurrentVersion(true);
+        headquarterRoot.setValidFrom(LocalDate.now());
+        headquarterRoot.setValidTo(LocalDate.of(9999, 12, 31));
+        result.add(headquarterRoot);
+
+        // 2. 构建部门映射（重要：使用LinkedHashMap避免重复键异常）
+        Map<Long, DepartmentSCD2> deptMap;
+        try {
+            // 使用LinkedHashMap保持顺序，同时避免重复键
+            deptMap = departments.stream()
+                    .collect(Collectors.toMap(
+                        DepartmentSCD2::getDeptId,
+                        d -> d,
+                        (existing, replacement) -> existing,  // 遇到重复保留现有的
+                        LinkedHashMap::new
+                    ));
+        } catch (Exception e) {
+            log.error("构建部门映射时出现异常", e);
+            // 降级处理：手动去重
+            deptMap = new LinkedHashMap<>();
+            for (DepartmentSCD2 dept : departments) {
+                if (!deptMap.containsKey(dept.getDeptId())) {
+                    deptMap.put(dept.getDeptId(), dept);
+                }
+            }
+        }
+
+        log.info("开始构建总部部门映射，共 {} 个部门", departments.size());
+
+        // 3. 从配置中获取目标部门列表
+        List<String> targetDeptNames = headquarterDepartmentConfig.getTargetDepartments();
+        List<DepartmentSCD2> firstLevel = departments.stream()
+                .filter(d -> targetDeptNames.contains(d.getName()))
+                .collect(Collectors.toList());
+
+        // 4. 处理一级部门（DEPARTMENT类型，parent为总部）
+        for (DepartmentSCD2 dept : firstLevel) {
+            DepartmentGroup group = new DepartmentGroup();
+            group.setGroupId(dept.getDeptId());      // 使用真实的dept_id
+            group.setDeptId(dept.getDeptId());       // 使用真实的dept_id
+            group.setGroupName(dept.getName());
+            group.setGroupType(DepartmentGroupType.DEPARTMENT);
+            group.setParentGroupId(-2L);             // 父节点指向总部（虚拟ID -2）
+            group.setCurrentVersion(true);
+            group.setValidFrom(LocalDate.now());
+            group.setValidTo(LocalDate.of(9999, 12, 31));
+            result.add(group);
+
+            // 5. 递归处理子部门（group_type=null，层级不限）
+            buildHeadquarterChildGroups(dept.getDeptId(), deptMap, result);
+        }
+
+        return result;
+    }
+
+    /**
+     * 递归构建总部子部门树
+     *
+     * @param parentId 父部门ID
+     * @param deptMap 所有部门映射
+     * @param result 结果列表
+     */
+    private void buildHeadquarterChildGroups(Long parentId, Map<Long, DepartmentSCD2> deptMap,
+                                            List<DepartmentGroup> result) {
+        for (DepartmentSCD2 dept : deptMap.values()) {
+            if (parentId.equals(dept.getParentId())) {
+                // 子部门的group_type为null
+                DepartmentGroup group = new DepartmentGroup();
+                group.setGroupId(dept.getDeptId());  // 使用真实的dept_id
+                group.setDeptId(dept.getDeptId());   // 使用真实的dept_id
+                group.setGroupName(dept.getName());
+                group.setGroupType(null);            // 子部门group_type为null
+                group.setParentGroupId(dept.getParentId());  // 指向真实的父部门ID
+                group.setCurrentVersion(true);
+                group.setValidFrom(LocalDate.now());
+                group.setValidTo(LocalDate.of(9999, 12, 31));
+                result.add(group);
+
+                // 继续递归处理下级
+                buildHeadquarterChildGroups(dept.getDeptId(), deptMap, result);
             }
         }
     }
