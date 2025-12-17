@@ -86,29 +86,62 @@ dingding:
     # 部门列表缓存时间（秒）
     department-cache-duration: 3600
 
-# 项目部配置
-project:
+# 统一部门配置
+# 注意：将原有的project和headquarter配置合并为unified.department结构
+unified:
   department:
-    group-name: "项目部"
-    target-departments:
-      - "养老事业部"
-      - "口腔项目部"
-      - "理疗项目部"
-      - "产康项目部"
-      - "健康管理部"
+    # 项目部配置
+    project:
+      group-name: "项目部"
+      virtual-id: -1
+      target-departments:
+        - "养老事业部"
+        - "口腔项目部"
+        - "理疗项目部"
+        - "产康项目部"
+        - "健康管理部"
+      description: "项目部相关配置，包含5个业务部门"
+      enabled: true
 
-# 总部配置
-headquarter:
-  department:
-    group-name: "总部"
-    target-departments:
-      - "财务中心"
-      - "信息中心"
-      - "营销中心"
-      - "医疗管理中心"
-      - "审计部"
-      - "人力行政中心"
-      - "供应中心"
+    # 总部配置
+    headquarter:
+      group-name: "总部"
+      virtual-id: -2
+      target-departments:
+        - "财务中心"
+        - "信息中心"
+        - "营销中心"
+        - "医疗管理中心"
+        - "审计部"
+        - "人力行政中心"
+        - "供应中心"
+      description: "总部相关配置，包含7个职能部门"
+      enabled: true
+
+# 保留原有配置作为备份注释（验证完成后可删除）
+# # 项目部配置
+# project:
+#   department:
+#     group-name: "项目部"
+#     target-departments:
+#       - "养老事业部"
+#       - "口腔项目部"
+#       - "理疗项目部"
+#       - "产康项目部"
+#       - "健康管理部"
+#
+# # 总部配置
+# headquarter:
+#   department:
+#     group-name: "总部"
+#     target-departments:
+#       - "财务中心"
+#       - "信息中心"
+#       - "营销中心"
+#       - "医疗管理中心"
+#       - "审计部"
+#       - "人力行政中心"
+#       - "供应中心"
 
 # 日志配置
 logging:

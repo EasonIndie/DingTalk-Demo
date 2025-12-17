@@ -1,7 +1,6 @@
 package com.example.dingding.service.impl;
 
-import com.example.dingding.config.HeadquarterDepartmentConfig;
-import com.example.dingding.config.ProjectDepartmentConfig;
+import com.example.dingding.config.UnifiedDepartmentConfig;
 import com.example.dingding.entity.DepartmentGroup;
 import com.example.dingding.entity.DepartmentSCD2;
 import com.example.dingding.enums.DepartmentGroupType;
@@ -36,38 +35,10 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
     private DepartmentSCD2Mapper departmentSCD2Mapper;
 
     @Autowired
-    private ProjectDepartmentConfig projectDepartmentConfig;
-
-    @Autowired
-    private HeadquarterDepartmentConfig headquarterDepartmentConfig;
+    private UnifiedDepartmentConfig unifiedDepartmentConfig;
 
     private static final String ROOT_DEPT_NAME = "区域管理部";
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public int generateDepartmentGroups() {
-        log.info("开始生成部门统计数据，根部门：{}", ROOT_DEPT_NAME);
-
-        // 检查根节点是否存在
-        if (!checkRootNodeExists(ROOT_DEPT_NAME)) {
-            log.error("根节点 '{}' 不存在或不是当前版本", ROOT_DEPT_NAME);
-            throw new RuntimeException("根节点 '" + ROOT_DEPT_NAME + "' 不存在或不是当前版本");
-        }
-
-        // 执行递归查询
-        List<DepartmentGroup> groups = departmentGroupMapper.selectDepartmentHierarchy(ROOT_DEPT_NAME);
-
-        if (CollectionUtils.isEmpty(groups)) {
-            log.warn("未找到任何部门数据");
-            return 0;
-        }
-
-        // 批量插入数据
-        int insertedCount = departmentGroupMapper.batchInsert(groups);
-
-        log.info("成功生成 {} 条部门统计数据", insertedCount);
-        return insertedCount;
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -103,6 +74,32 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
         // 构建树形结构
         return buildTree(flatList);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int generateDepartmentGroups() {
+        log.info("开始生成部门统计数据，根部门：{}", ROOT_DEPT_NAME);
+
+        // 检查根节点是否存在
+        if (!checkRootNodeExists(ROOT_DEPT_NAME)) {
+            log.error("根节点 '{}' 不存在或不是当前版本", ROOT_DEPT_NAME);
+            throw new RuntimeException("根节点 '" + ROOT_DEPT_NAME + "' 不存在或不是当前版本");
+        }
+
+        // 执行递归查询
+        List<DepartmentGroup> groups = departmentGroupMapper.selectDepartmentHierarchy(ROOT_DEPT_NAME);
+
+        if (CollectionUtils.isEmpty(groups)) {
+            log.warn("未找到任何部门数据");
+            return 0;
+        }
+
+        // 批量插入数据
+        int insertedCount = departmentGroupMapper.batchInsert(groups);
+
+        log.info("成功生成 {} 条部门统计数据", insertedCount);
+        return insertedCount;
     }
 
     /**
@@ -171,8 +168,8 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      * @return 部门列表
      */
     private List<DepartmentSCD2> findProjectDepartments() {
-        // 从配置中获取目标部门列表，避免硬编码
-        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+        // 从统一配置中获取项目部目标部门列表，避免硬编码
+        List<String> targetDeptNames = unifiedDepartmentConfig.getProject().getTargetDepartments();
 
         if (CollectionUtils.isEmpty(targetDeptNames)) {
             log.error("项目部门配置为空，请检查配置文件");
@@ -231,8 +228,8 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      * @return 部门列表
      */
     private List<DepartmentSCD2> findHeadquarterDepartments() {
-        // 从配置中获取目标部门列表
-        List<String> targetDeptNames = headquarterDepartmentConfig.getTargetDepartments();
+        // 从统一配置中获取总部目标部门列表
+        List<String> targetDeptNames = unifiedDepartmentConfig.getHeadquarter().getTargetDepartments();
 
         if (CollectionUtils.isEmpty(targetDeptNames)) {
             log.error("总部部门配置为空，请检查配置文件");
@@ -297,11 +294,12 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         List<DepartmentGroup> result = new ArrayList<>();
 
         // 1. 创建项目部根节点（REGION类型，parent_group_id=null）
-        // 注意：项目部使用虚拟ID -1，因为不是真实部门
+        // 注意：使用配置中的虚拟ID，避免硬编码
+        Long projectVirtualId = unifiedDepartmentConfig.getProject().getVirtualId();
         DepartmentGroup projectRoot = new DepartmentGroup();
-        projectRoot.setGroupId(-1L);
-        projectRoot.setDeptId(-1L);
-        projectRoot.setGroupName(projectDepartmentConfig.getGroupName());
+        projectRoot.setGroupId(projectVirtualId);
+        projectRoot.setDeptId(projectVirtualId);
+        projectRoot.setGroupName(unifiedDepartmentConfig.getProject().getGroupName());
         projectRoot.setGroupType(DepartmentGroupType.REGION);
         projectRoot.setParentGroupId(null);  // REGION的父节点为null
         projectRoot.setCurrentVersion(true);
@@ -346,8 +344,8 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
             throw e;
         }
 
-        // 3. 从配置中获取目标部门列表（避免硬编码）
-        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+        // 3. 从统一配置中获取项目部目标部门列表（避免硬编码）
+        List<String> targetDeptNames = unifiedDepartmentConfig.getProject().getTargetDepartments();
         List<DepartmentSCD2> firstLevel = departments.stream()
                 .filter(d -> targetDeptNames.contains(d.getName()))
                 .collect(Collectors.toList());
@@ -359,7 +357,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
             group.setDeptId(dept.getDeptId());       // 使用真实的dept_id
             group.setGroupName(dept.getName());
             group.setGroupType(DepartmentGroupType.DEPARTMENT);
-            group.setParentGroupId(-1L);             // 父节点指向项目部（虚拟ID -1）
+            group.setParentGroupId(projectVirtualId);  // 父节点指向项目部（使用配置的虚拟ID）
             group.setCurrentVersion(true);
             group.setValidFrom(LocalDate.now());
             group.setValidTo(LocalDate.of(9999, 12, 31));
@@ -413,11 +411,12 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         List<DepartmentGroup> result = new ArrayList<>();
 
         // 1. 创建总部根节点（REGION类型，parent_group_id=null）
-        // 使用虚拟ID -2，避免与项目部（-1）冲突
+        // 使用配置中的虚拟ID，确保不与其他节点冲突
+        Long headquarterVirtualId = unifiedDepartmentConfig.getHeadquarter().getVirtualId();
         DepartmentGroup headquarterRoot = new DepartmentGroup();
-        headquarterRoot.setGroupId(-2L);
-        headquarterRoot.setDeptId(-2L);
-        headquarterRoot.setGroupName(headquarterDepartmentConfig.getGroupName());
+        headquarterRoot.setGroupId(headquarterVirtualId);
+        headquarterRoot.setDeptId(headquarterVirtualId);
+        headquarterRoot.setGroupName(unifiedDepartmentConfig.getHeadquarter().getGroupName());
         headquarterRoot.setGroupType(DepartmentGroupType.REGION);
         headquarterRoot.setParentGroupId(null);  // REGION的父节点为null
         headquarterRoot.setCurrentVersion(true);
@@ -449,8 +448,8 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
         log.info("开始构建总部部门映射，共 {} 个部门", departments.size());
 
-        // 3. 从配置中获取目标部门列表
-        List<String> targetDeptNames = headquarterDepartmentConfig.getTargetDepartments();
+        // 3. 从统一配置中获取总部目标部门列表
+        List<String> targetDeptNames = unifiedDepartmentConfig.getHeadquarter().getTargetDepartments();
         List<DepartmentSCD2> firstLevel = departments.stream()
                 .filter(d -> targetDeptNames.contains(d.getName()))
                 .collect(Collectors.toList());
@@ -462,7 +461,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
             group.setDeptId(dept.getDeptId());       // 使用真实的dept_id
             group.setGroupName(dept.getName());
             group.setGroupType(DepartmentGroupType.DEPARTMENT);
-            group.setParentGroupId(-2L);             // 父节点指向总部（虚拟ID -2）
+            group.setParentGroupId(headquarterVirtualId);  // 父节点指向总部（使用配置的虚拟ID）
             group.setCurrentVersion(true);
             group.setValidFrom(LocalDate.now());
             group.setValidTo(LocalDate.of(9999, 12, 31));
@@ -648,8 +647,8 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      * @return 部门的查找路径
      */
     private String findParentPath(List<DepartmentSCD2> departments, Long deptId) {
-        // 查找所有目标部门作为可能的起点
-        List<String> targetDeptNames = projectDepartmentConfig.getTargetDepartments();
+        // 查找所有项目目标部门作为可能的起点
+        List<String> targetDeptNames = unifiedDepartmentConfig.getProject().getTargetDepartments();
 
         // 创建部门ID到部门的映射
         Map<Long, DepartmentSCD2> deptMap = departments.stream()
