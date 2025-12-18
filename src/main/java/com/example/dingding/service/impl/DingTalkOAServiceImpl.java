@@ -124,20 +124,20 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             int totalDepts = 0;
             int totalUsers = 0;
             int totalInstances = 0;
-
+            //departments = Arrays.asList(new DepartmentSCD2().setDeptId(747454379L)); //开发部 测试用
             // 4. 遍历每个部门，实时获取用户ID
             for (DepartmentSCD2 dept : departments) {
                 try {
                     // 获取部门下的所有用户ID（实时从API获取）
-                    Set<String> userIds = getUserIdsByDepartmentFromAPI(dept.getDeptId(), accessToken);
+                    Set<Object> userIds =  redisTemplate.opsForSet().members(JyOaConstants.DEPT_USER_IDS + dept.getDeptId());
                     if (!CollectionUtils.isEmpty(userIds)) {
                         totalUsers += userIds.size();
                         log.debug("部门[{}]获取到{}个用户", dept.getDeptId(), userIds.size());
 
                         // 处理每个用户的OA数据
                         for (String formId : JyOaConstants.FORM_MAP.keySet()) {
-                            for (String userId : userIds) {
-                                List<String> instanceIds = getFormInstantIds(formId, userId, startTime);
+                            for (Object userId : userIds) {
+                                List<String> instanceIds = getFormInstantIds(formId, String.valueOf(userId), startTime);
                                 if (!CollectionUtils.isEmpty(instanceIds)) {
                                     totalInstances += instanceIds.size();
                                     log.info("表单ID: {}, 用户ID: {}, 从时间{}开始获取到{}个实例ID",
