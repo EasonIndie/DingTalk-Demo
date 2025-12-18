@@ -93,7 +93,7 @@ unified:
     # 项目部配置
     project:
       group-name: "项目部"
-      virtual-id: -1
+      virtual-id: 928695108
       target-departments:
         - "养老事业部"
         - "口腔项目部"

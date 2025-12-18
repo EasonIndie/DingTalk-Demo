@@ -71,4 +71,39 @@ public class DepartmentGroupController {
             return ResponseEntity.internalServerError().build();
         }
     }
+
+    /**
+     * 从Excel文件更新部门简称
+     */
+    @PutMapping("/updateShortName")
+    public ResponseEntity<Map<String, Object>> updateShortNameFromExcel(@RequestParam("filePath") String filePath) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            if (filePath == null || filePath.trim().isEmpty()) {
+                result.put("success", false);
+                result.put("message", "文件路径不能为空");
+                return ResponseEntity.badRequest().body(result);
+            }
+
+            log.info("接收到从Excel文件更新部门简称的请求，文件路径：{}", filePath);
+
+            int updateCount = departmentGroupService.updateShortNameFromExcel(filePath);
+
+            result.put("success", true);
+            result.put("message", "部门简称更新成功");
+            result.put("count", updateCount);
+
+            log.info("成功更新 {} 条部门简称记录", updateCount);
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            log.error("更新部门简称失败", e);
+
+            result.put("success", false);
+            result.put("message", "更新失败：" + e.getMessage());
+
+            return ResponseEntity.internalServerError().body(result);
+        }
+    }
 }

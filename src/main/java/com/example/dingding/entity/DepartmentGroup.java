@@ -58,6 +58,12 @@ public class DepartmentGroup implements Serializable {
     private String groupName;
 
     /**
+     * 简称
+     */
+    @TableField("short_name")
+    private String shortName;
+
+    /**
      * 版本生效日期
      */
     @TableField("valid_from")

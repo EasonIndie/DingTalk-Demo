@@ -3,6 +3,9 @@ package com.example.dingding.enums;
 import com.baomidou.mybatisplus.annotation.EnumValue;
 import com.fasterxml.jackson.annotation.JsonValue;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 部门统计类型枚举
  * 定义统计维度表的分组类型
@@ -43,6 +46,8 @@ public enum DepartmentGroupType {
         return description;
     }
 
+
+
     /**
      * 根据代码获取枚举值
      *
@@ -61,5 +66,14 @@ public enum DepartmentGroupType {
         }
 
         throw new IllegalArgumentException("Unknown DepartmentGroupType code: " + code);
+    }
+
+
+    public static List<String> getAllCode() {
+        List<String> descriptions = new ArrayList<>();
+        for (DepartmentGroupType type : values()) {
+            descriptions.add(type.getCode());
+        }
+        return descriptions;
     }
 }

@@ -58,4 +58,12 @@ public interface DepartmentGroupMapper extends BaseMapper<DepartmentGroup> {
      * @return 是否存在
      */
     boolean checkRootNodeExists(@Param("rootDeptName") String rootDeptName);
+
+    /**
+     * 批量更新简称
+     *
+     * @param groups 部门分组列表
+     * @return 更新的记录数
+     */
+    int batchUpdateShortName(@Param("groups") List<DepartmentGroup> groups);
 }

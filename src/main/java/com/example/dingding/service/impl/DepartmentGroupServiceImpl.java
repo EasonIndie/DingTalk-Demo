@@ -1,5 +1,9 @@
 package com.example.dingding.service.impl;
 
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.event.AnalysisEventListener;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.dingding.config.UnifiedDepartmentConfig;
 import com.example.dingding.entity.DepartmentGroup;
 import com.example.dingding.entity.DepartmentSCD2;
@@ -13,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.io.File;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -675,5 +680,94 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         }
 
         return String.join(" > ", path);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int updateShortNameFromExcel(String filePath) {
+        log.info("开始从Excel文件读取映射数据并更新部门简称，文件路径：{}", filePath);
+
+        // 1. 读取Excel文件，构建映射Map
+        Map<String, String> mappingMap = readExcelAndBuildMapping(filePath);
+
+        if (CollectionUtils.isEmpty(mappingMap)) {
+            log.warn("Excel文件中没有有效的映射数据");
+            return 0;
+        }
+
+        log.info("从Excel文件读取到 {} 条映射数据", mappingMap.size());
+
+        // 2. 查询所有记录
+        List<DepartmentGroup> allGroups = departmentGroupMapper.selectList(
+                new LambdaQueryWrapper<DepartmentGroup>()
+                        .in(DepartmentGroup::getGroupType, DepartmentGroupType.getAllCode()));
+
+        if (CollectionUtils.isEmpty(allGroups)) {
+            log.warn("数据库中没有部门记录");
+            return 0;
+        }
+
+        // 3. 匹配并更新简称
+        List<DepartmentGroup> groupsToUpdate  = allGroups.stream()
+                .map(e ->
+                        e.setShortName(mappingMap.getOrDefault(e.getGroupName(), e.getGroupName())))
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(groupsToUpdate)) {
+            log.info("没有需要更新的记录");
+            return 0;
+        }
+
+        // 4. 批量更新
+        int updateCount = departmentGroupMapper.batchUpdateShortName(groupsToUpdate);
+        log.info("成功更新 {} 条记录的简称", updateCount);
+
+        return updateCount;
+    }
+
+    /**
+     * 读取Excel文件并构建映射Map
+     * @param filePath Excel文件路径
+     * @return key-value映射Map
+     */
+    private Map<String, String> readExcelAndBuildMapping(String filePath) {
+        Map<String, String> mappingMap = new HashMap<>();
+
+        try {
+            File file = new File(filePath);
+
+            if (!file.exists()) {
+                throw new RuntimeException("Excel文件不存在: " + filePath);
+            }
+
+            // 读取Excel文件，从第2行开始，读取第2列和第3列
+            EasyExcel.read(file,
+                new AnalysisEventListener<Map<Integer, String>>() {
+                    @Override
+                    public void invoke(Map<Integer, String> data, AnalysisContext context) {
+                        // 获取第2列(key)和第3列(value)
+                        String key = data.get(1); // 索引从0开始，1代表第2列
+                        String value = data.get(2); // 索引2代表第3列
+
+                        if (key != null && value != null) {
+                            mappingMap.put(key.trim(), value.trim());
+                        }
+                    }
+
+                    @Override
+                    public void doAfterAllAnalysed(AnalysisContext context) {
+                        log.info("Excel文件读取完成，共读取 {} 条数据", mappingMap.size());
+                    }
+                })
+                .sheet()
+                .headRowNumber(1) // 设置标题行为1行，这样就会从第2行开始读取数据
+                .doRead();
+
+        } catch (Exception e) {
+            log.error("读取Excel文件失败，文件路径：{}", filePath, e);
+            throw new RuntimeException("读取Excel文件失败: " + e.getMessage());
+        }
+
+        return mappingMap;
     }
 }

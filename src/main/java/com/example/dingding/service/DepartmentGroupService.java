@@ -37,4 +37,12 @@ public interface DepartmentGroupService {
      * @return 树形结构数据
      */
     List<Map<String, Object>> getTreeStructure();
+
+    /**
+     * 从Excel文件读取映射数据并更新部门简称
+     *
+     * @param filePath Excel文件路径
+     * @return 更新的记录数
+     */
+    int updateShortNameFromExcel(String filePath);
 }

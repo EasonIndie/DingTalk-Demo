@@ -81,23 +81,6 @@ public class UnifiedDepartmentConfig {
         // 验证总部配置
         validateDepartmentConfig("headquarter", headquarter);
 
-        // 验证虚拟ID唯一性
-        if (project != null && headquarter != null
-            && project.getVirtualId() != null && headquarter.getVirtualId() != null
-            && project.getVirtualId().equals(headquarter.getVirtualId())) {
-            throw new IllegalStateException("项目部和总部的虚拟ID不能相同，当前都使用了: " + project.getVirtualId());
-        }
-
-        // 验证虚拟ID分配符合预期（避免与真实部门ID冲突）
-        if (project != null && project.getVirtualId() != null && project.getVirtualId() >= 0) {
-            throw new IllegalStateException("项目部的虚拟ID必须为负数，当前值: " + project.getVirtualId());
-        }
-
-        if (headquarter != null && headquarter.getVirtualId() != null && headquarter.getVirtualId() >= 0) {
-            throw new IllegalStateException("总部的虚拟ID必须为负数，当前值: " + headquarter.getVirtualId());
-        }
-
-        log.info("统一部门配置验证通过");
         log.info("项目部配置: 虚拟ID={}, 目标部门数={}, 启用状态={}",
             project != null ? project.getVirtualId() : "null",
             project != null && project.getTargetDepartments() != null ? project.getTargetDepartments().size() : 0,

@@ -9,6 +9,7 @@
         <result column="group_type" property="groupType" jdbcType="VARCHAR"/>
         <result column="parent_group_id" property="parentGroupId" jdbcType="BIGINT"/>
         <result column="group_name" property="groupName" jdbcType="VARCHAR"/>
+        <result column="short_name" property="shortName" jdbcType="VARCHAR"/>
         <result column="valid_from" property="validFrom" jdbcType="DATE"/>
         <result column="valid_to" property="validTo" jdbcType="DATE"/>
         <result column="is_current" property="isCurrent" jdbcType="BOOLEAN"/>
@@ -131,5 +132,15 @@
         WHERE g.is_current = 1
         ORDER BY g.group_type, g.group_name
     </select>
+
+    <!-- 批量更新简称 -->
+    <update id="batchUpdateShortName">
+        <foreach collection="groups" item="group" separator=";">
+            UPDATE dim_department_group_jy
+            SET short_name = #{group.shortName, jdbcType=VARCHAR},
+                updated_at = NOW()
+            WHERE group_id = #{group.groupId}
+        </foreach>
+    </update>
 
 </mapper>
