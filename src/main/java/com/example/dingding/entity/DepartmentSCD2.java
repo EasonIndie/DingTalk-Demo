@@ -50,6 +50,12 @@ public class DepartmentSCD2 implements Serializable {
     private String name;
 
     /**
+     * 部门下的员工数量
+     */
+    @TableField("num")
+    private Integer num;
+
+    /**
      * 版本生效日期
      */
     @TableField("valid_from")
@@ -100,11 +106,12 @@ public class DepartmentSCD2 implements Serializable {
     /**
      * 便利方法：创建新版本实例
      */
-    public static DepartmentSCD2 createNewVersion(Long deptId, Long parentId, String name, LocalDate effectiveDate) {
+    public static DepartmentSCD2 createNewVersion(Long deptId, Long parentId, String name, Integer num, LocalDate effectiveDate) {
         DepartmentSCD2 dept = new DepartmentSCD2();
         dept.setDeptId(deptId);
         dept.setParentId(parentId);
         dept.setName(name);
+        dept.setNum(num);
         dept.setValidFrom(effectiveDate);
         // 使用一个足够远的未来日期表示永久有效
         dept.setValidTo(LocalDate.of(9999, 12, 31));

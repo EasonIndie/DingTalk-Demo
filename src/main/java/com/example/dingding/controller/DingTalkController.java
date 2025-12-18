@@ -46,8 +46,7 @@ public class DingTalkController {
             log.info("收到同步OA数据的请求");
 
             // 如果没有指定开始时间，使用默认时间（30天前）
-            LocalDateTime syncTime = startTime != null ? startTime : LocalDateTime.now().minusDays(30);
-
+            LocalDateTime syncTime = startTime != null ? startTime : LocalDateTime.now();
             long start = System.currentTimeMillis();
             dingTalkOAService.syncOALSS(syncTime);
             long end = System.currentTimeMillis();

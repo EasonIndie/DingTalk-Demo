@@ -78,6 +78,11 @@ public class DingdingConfig {
         private String departmentListUrl = "/topapi/v2/department/listsub";
 
         /**
+         * 获取部门下用户id
+         */
+        private String listUserid = "/topapi/user/listid";
+
+        /**
          * 获取部门用户列表
          */
         private String userListUrl = "/topapi/v2/user/list";
@@ -105,7 +110,7 @@ public class DingdingConfig {
         /**
          * API调用间隔时间（毫秒）
          */
-        private long apiCallInterval = 100;
+        private long apiCallInterval = 20;
 
         /**
          * 最大时间拆分数量

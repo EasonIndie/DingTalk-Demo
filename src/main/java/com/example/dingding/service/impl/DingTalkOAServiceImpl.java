@@ -1,12 +1,15 @@
 package com.example.dingding.service.impl;
 
+import com.alibaba.fastjson.JSONObject;
 import com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody;
 import com.aliyun.tea.TeaException;
 import com.dingtalk.api.DefaultDingTalkClient;
 import com.dingtalk.api.DingTalkClient;
+import com.dingtalk.api.request.OapiUserListidRequest;
 import com.dingtalk.api.request.OapiV2DepartmentListsubRequest;
 import com.dingtalk.api.request.OapiGettokenRequest;
 import com.dingtalk.api.request.OapiV2UserListRequest;
+import com.dingtalk.api.response.OapiUserListidResponse;
 import com.dingtalk.api.response.OapiV2DepartmentListsubResponse;
 import com.dingtalk.api.response.OapiGettokenResponse;
 import com.dingtalk.api.response.OapiV2UserListResponse;
@@ -17,8 +20,10 @@ import com.example.dingding.dto.DepartmentDTO;
 import com.example.dingding.entity.*;
 import com.example.dingding.service.*;
 import com.taobao.api.ApiException;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -46,8 +51,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
     @Autowired
     private DingdingConfig dingdingConfig;
 
-    //@Autowired
-    //private RedisTemplate<String, Object> redisTemplate;
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
     private IProcessInstanceService processInstanceService;
@@ -471,14 +476,12 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
      *
      * @return access_token
      */
-    private String dingdingAppToken;
     private String getValidAccessToken() {
         try {
             // 先从Redis缓存获取
-            //String cachedToken = (String) redisTemplate.opsForValue().get(TOKEN_CACHE_KEY);
-            String cachedToken = dingdingAppToken;
+            String cachedToken = (String) redisTemplate.opsForValue().get(TOKEN_CACHE_KEY);
             if (StringUtils.hasText(cachedToken)) {
-                log.debug("从Redis缓存获取到access_token");
+                //log.debug("从Redis缓存获取到access_token");
                 return cachedToken;
             }
 
@@ -512,8 +515,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
 
                 // 缓存到Redis，设置过期时间
                 long expireTime = dingdingConfig.getToken().getCacheDuration(); // 转换为秒
-                //redisTemplate.opsForValue().set(TOKEN_CACHE_KEY, accessToken, expireTime, TimeUnit.SECONDS);
-                dingdingAppToken = accessToken;//先放到本地
+                redisTemplate.opsForValue().set(TOKEN_CACHE_KEY, accessToken, expireTime, TimeUnit.SECONDS);
                 log.info("成功获取并缓存access_token，过期时间{}秒", expireTime);
                 return accessToken;
             } else {
@@ -892,6 +894,9 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             List<DepartmentDTO> allDepartments = new ArrayList<>();
             recursionGetDepartmentsWithDetails(ROOT_DEPT_ID, accessToken, allDepartments, new HashSet<>());
 
+            //3.获取userids设置num并缓存到redis
+            getDeptUserIds(allDepartments);
+
             log.info("成功获取{}个部门的详细信息", allDepartments.size());
             return allDepartments;
 
@@ -900,6 +905,40 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             return Collections.emptyList();
         }
     }
+
+    private void getDeptUserIds(List<DepartmentDTO> allDepartments) {
+        for (DepartmentDTO dept : allDepartments){
+            try {
+                String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getListUserid();
+                DingTalkClient client = new DefaultDingTalkClient(url);
+                OapiUserListidRequest req = new OapiUserListidRequest();
+                req.setDeptId(dept.getDeptId());
+                OapiUserListidResponse rsp = client.execute(req, getValidAccessToken());
+                UserIdResponse userIdResponseDTO = JSONObject.parseObject(rsp.getBody(), UserIdResponse.class);
+                if (userIdResponseDTO.getErrcode() == 0 && !userIdResponseDTO.getResult().getUserid_list().isEmpty()){
+                    dept.setNum(userIdResponseDTO.getResult().getUserid_list().size());
+                    redisTemplate.opsForSet().add(JyOaConstants.DEPT_USER_IDS + dept.getDeptId(), userIdResponseDTO.getResult().getUserid_list().toArray(new String[0]));
+                    log.info("获取到部门{}，下员工列表{}个", dept.getName(), dept.getNum());
+                }
+            } catch (ApiException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    @Data
+    class UserIdResponse {
+        private int errcode;
+        private UserIdResult result;
+        private String errmsg;
+        private String request_id;
+    }
+
+    @Data
+    class UserIdResult {
+        private List<String> userid_list;
+    }
+
 
     /**
      * 递归获取部门详细信息的核心方法
@@ -950,7 +989,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                                 log.debug("添加部门: ID={}, Name={}, ParentId={}",
                                          deptDto.getDeptId(), deptDto.getName(), deptDto.getParentId());
                             }
-
+                            Thread.sleep(JyOaConstants.DEFAULT_MAX_TIME_SPLITS);
                             // 递归处理子部门
                             recursionGetDepartmentsWithDetails(dept.getDeptId(), accessToken, allDepartments, processedDeptIds);
                         }
@@ -960,7 +999,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                 log.warn("获取部门{}的子部门列表失败：{}", deptId, response.getErrmsg());
             }
 
-        } catch (ApiException e) {
+        } catch (Exception e) {
             log.error("调用钉钉获取部门详情API失败，deptId: {}", deptId, e);
         }
     }

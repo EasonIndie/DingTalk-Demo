@@ -34,6 +34,11 @@ public class DepartmentDTO implements Serializable {
     private String name;
 
     /**
+     * 部门下的员工数量
+     */
+    private Integer num;
+
+    /**
      * 从钉钉API响应创建DepartmentDTO
      */
     public static DepartmentDTO fromDingTalkResponse(com.dingtalk.api.response.OapiV2DepartmentListsubResponse.DeptBaseResponse response) {

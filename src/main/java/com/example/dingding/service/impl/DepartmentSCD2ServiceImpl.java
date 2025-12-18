@@ -60,6 +60,7 @@ public class DepartmentSCD2ServiceImpl
                 deptDto.getDeptId(),
                 deptDto.getParentId(),
                 deptDto.getName(),
+                deptDto.getNum(),
                 effectiveDate
         );
 
@@ -117,8 +118,10 @@ public class DepartmentSCD2ServiceImpl
         // 检测父部门ID变化（注意处理null值）
         boolean parentChanged = !Objects.equals(current.getParentId(), newDept.getParentId());
 
+        boolean deptNum = !Objects.equals(current.getNum(), newDept.getNum());
+
         // 如果有变化，记录详细日志
-        if (nameChanged || parentChanged) {
+        if (nameChanged || parentChanged || deptNum) {
             log.info("检测到部门[{}]发生变化:", current.getDeptId());
 
             if (nameChanged) {
@@ -129,6 +132,11 @@ public class DepartmentSCD2ServiceImpl
             if (parentChanged) {
                 log.info("  - 父部门ID: {} -> {}",
                         current.getParentId(), newDept.getParentId());
+            }
+
+            if (deptNum){
+                log.info("  - 部门成员数量: {} -> {}",
+                        current.getNum(), newDept.getNum());
             }
 
             return true;
@@ -180,7 +188,7 @@ public class DepartmentSCD2ServiceImpl
                     result.getNewCount(),
                     result.getChangedCount(),
                     result.getUnchangedCount(),
-                    deletedCount,
+                    0,
                     result.getFailedCount());
 
         } catch (Exception e) {
@@ -202,23 +210,13 @@ public class DepartmentSCD2ServiceImpl
 
         if (current == null) {
             // 新增部门
-            if (canCreateVersionOnDate(dept.getDeptId(), syncDate)) {
-                insertNewVersion(dept, syncDate);
-                result.setNewCount(result.getNewCount() + 1);
-                log.info("新增部门: [{}] {}", dept.getDeptId(), dept.getName());
-            } else {
-                log.debug("部门[{}]在{}已有版本，跳过新增", dept.getDeptId(), syncDate);
-                result.setUnchangedCount(result.getUnchangedCount() + 1);
-            }
+            insertNewVersion(dept, syncDate);
+            result.setNewCount(result.getNewCount() + 1);
+            log.info("新增部门: [{}] {}", dept.getDeptId(), dept.getName());
         } else if (hasChanged(current, dept)) {
             // 部门发生变化
-            if (canCreateVersionOnDate(dept.getDeptId(), syncDate)) {
-                createNewVersionForChangedDept(dept, syncDate);
-                result.setChangedCount(result.getChangedCount() + 1);
-            } else {
-                log.debug("部门[{}]在{}已有版本，跳过变更", dept.getDeptId(), syncDate);
-                result.setUnchangedCount(result.getUnchangedCount() + 1);
-            }
+            createNewVersionForChangedDept(dept, syncDate);
+            result.setChangedCount(result.getChangedCount() + 1);
         } else {
             // 未变化
             result.setUnchangedCount(result.getUnchangedCount() + 1);
