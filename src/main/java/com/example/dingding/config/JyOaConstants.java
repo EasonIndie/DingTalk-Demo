@@ -22,4 +22,6 @@ public class JyOaConstants {
     public static final int DEFAULT_MAX_TIME_SPLITS = 50;
 
     public static final String DEPT_USER_IDS = "jyoa:deptuserids:";
+
+    public static final String PARTICIPANTS_CNT = "jyoa:participants:cnt";
 }

@@ -895,7 +895,8 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             recursionGetDepartmentsWithDetails(ROOT_DEPT_ID, accessToken, allDepartments, new HashSet<>());
 
             //3.获取userids设置num并缓存到redis
-            getDeptUserIds(allDepartments);
+            Integer participants = 0;
+            getDeptUserIds(allDepartments, participants);
 
             log.info("成功获取{}个部门的详细信息", allDepartments.size());
             return allDepartments;
@@ -906,7 +907,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
         }
     }
 
-    private void getDeptUserIds(List<DepartmentDTO> allDepartments) {
+    private void getDeptUserIds(List<DepartmentDTO> allDepartments, Integer participants) {
         for (DepartmentDTO dept : allDepartments){
             try {
                 String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getListUserid();
@@ -918,10 +919,13 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                 if (userIdResponseDTO.getErrcode() == 0 && !userIdResponseDTO.getResult().getUserid_list().isEmpty()){
                     dept.setNum(userIdResponseDTO.getResult().getUserid_list().size());
                     redisTemplate.opsForSet().add(JyOaConstants.DEPT_USER_IDS + dept.getDeptId(), userIdResponseDTO.getResult().getUserid_list().toArray(new String[0]));
+                    participants += dept.getNum();
                     log.info("获取到部门{}，下员工列表{}个", dept.getName(), dept.getNum());
                 }
             } catch (ApiException e) {
                 throw new RuntimeException(e);
+            }finally {
+                redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT, participants);
             }
         }
     }
