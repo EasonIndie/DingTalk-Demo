@@ -83,6 +83,11 @@ public class DingdingConfig {
         private String listUserid = "/topapi/user/listid";
 
         /**
+         * 获取部门下用户详情
+         */
+        private String departmentGet = "/topapi/v2/department/get";
+
+        /**
          * 获取部门用户列表
          */
         private String userListUrl = "/topapi/v2/user/list";

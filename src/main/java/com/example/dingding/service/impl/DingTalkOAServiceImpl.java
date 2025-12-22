@@ -1,18 +1,13 @@
 package com.example.dingding.service.impl;
 
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
 import com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody;
 import com.aliyun.tea.TeaException;
 import com.dingtalk.api.DefaultDingTalkClient;
 import com.dingtalk.api.DingTalkClient;
-import com.dingtalk.api.request.OapiUserListidRequest;
-import com.dingtalk.api.request.OapiV2DepartmentListsubRequest;
-import com.dingtalk.api.request.OapiGettokenRequest;
-import com.dingtalk.api.request.OapiV2UserListRequest;
-import com.dingtalk.api.response.OapiUserListidResponse;
-import com.dingtalk.api.response.OapiV2DepartmentListsubResponse;
-import com.dingtalk.api.response.OapiGettokenResponse;
-import com.dingtalk.api.response.OapiV2UserListResponse;
+import com.dingtalk.api.request.*;
+import com.dingtalk.api.response.*;
 import com.example.dingding.config.JyOaConstants;
 import com.example.dingding.config.DingdingConfig;
 import com.example.dingding.service.DingTalkOAService;
@@ -895,8 +890,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             recursionGetDepartmentsWithDetails(ROOT_DEPT_ID, accessToken, allDepartments, new HashSet<>());
 
             //3.获取userids设置num并缓存到redis
-            Integer participants = 0;
-            getDeptUserIds(allDepartments, participants);
+            getDeptUserIds(allDepartments);
 
             log.info("成功获取{}个部门的详细信息", allDepartments.size());
             return allDepartments;
@@ -907,7 +901,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
         }
     }
 
-    private void getDeptUserIds(List<DepartmentDTO> allDepartments, Integer participants) {
+    private void getDeptUserIds(List<DepartmentDTO> allDepartments) {
         for (DepartmentDTO dept : allDepartments){
             try {
                 String url = dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getListUserid();
@@ -917,15 +911,23 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                 OapiUserListidResponse rsp = client.execute(req, getValidAccessToken());
                 UserIdResponse userIdResponseDTO = JSONObject.parseObject(rsp.getBody(), UserIdResponse.class);
                 if (userIdResponseDTO.getErrcode() == 0 && !userIdResponseDTO.getResult().getUserid_list().isEmpty()){
-                    dept.setNum(userIdResponseDTO.getResult().getUserid_list().size());
                     redisTemplate.opsForSet().add(JyOaConstants.DEPT_USER_IDS + dept.getDeptId(), userIdResponseDTO.getResult().getUserid_list().toArray(new String[0]));
-                    participants += dept.getNum();
-                    log.info("获取到部门{}，下员工列表{}个", dept.getName(), dept.getNum());
                 }
-            } catch (ApiException e) {
+                Thread.sleep(dingdingConfig.getApi().getApiCallInterval());
+                
+                DingTalkClient client1 = new DefaultDingTalkClient(dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getDepartmentGet());
+                OapiV2DepartmentGetRequest req1 = new OapiV2DepartmentGetRequest();
+                req1.setDeptId(dept.getDeptId());
+                OapiV2DepartmentGetResponse rsp1 = client1.execute(req1, getValidAccessToken());
+                JSONObject parsed = JSON.parseObject(rsp1.getBody());
+                if (parsed.getInteger("errcode") == 0){
+                    Integer deptNum = parsed.getJSONObject("result").getInteger("member_count");
+                    dept.setNum(deptNum);
+                }
+                log.info("获取到部门{}，下员工列表{}个", dept.getName(), dept.getNum());
+            } catch (Exception e) {
+                log.info("获取部门信息报错：", e.getMessage(), e);
                 throw new RuntimeException(e);
-            }finally {
-                redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT, participants);
             }
         }
     }
@@ -993,7 +995,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
                                 log.debug("添加部门: ID={}, Name={}, ParentId={}",
                                          deptDto.getDeptId(), deptDto.getName(), deptDto.getParentId());
                             }
-                            Thread.sleep(JyOaConstants.DEFAULT_MAX_TIME_SPLITS);
+                            Thread.sleep(dingdingConfig.getApi().getApiCallInterval());
                             // 递归处理子部门
                             recursionGetDepartmentsWithDetails(dept.getDeptId(), accessToken, allDepartments, processedDeptIds);
                         }

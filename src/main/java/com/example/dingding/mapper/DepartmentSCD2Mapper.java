@@ -32,7 +32,7 @@ public interface DepartmentSCD2Mapper extends BaseMapper<DepartmentSCD2> {
         if (names == null || names.isEmpty()) {
             return Collections.emptyList();
         }
-        return selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<DepartmentSCD2>()
+        return selectList(new LambdaQueryWrapper<DepartmentSCD2>()
                 .in(DepartmentSCD2::getName, names)
                 .eq(DepartmentSCD2::getIsCurrent, true)
                 .orderByAsc(DepartmentSCD2::getDeptId));
