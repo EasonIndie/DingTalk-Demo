@@ -148,10 +148,10 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         List<DepartmentGroup> groupList = buildProjectDepartmentTree(projectDepts);
 
         // 3. 批量插入数据
-//        int insertedCount = departmentGroupMapper.batchInsert(groupList);
+        int insertedCount = departmentGroupMapper.batchInsert(groupList);
 
-//        log.info("成功生成 {} 条项目部统计数据", insertedCount);
-        return 0;
+        log.info("成功生成 {} 条项目部统计数据", insertedCount);
+        return insertedCount;
     }
 
     /**
