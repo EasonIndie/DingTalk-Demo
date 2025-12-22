@@ -10,6 +10,7 @@
         <result column="parent_group_id" property="parentGroupId" jdbcType="BIGINT"/>
         <result column="group_name" property="groupName" jdbcType="VARCHAR"/>
         <result column="short_name" property="shortName" jdbcType="VARCHAR"/>
+        <result column="num" property="num" jdbcType="INTEGER"/>
         <result column="valid_from" property="validFrom" jdbcType="DATE"/>
         <result column="valid_to" property="validTo" jdbcType="DATE"/>
         <result column="is_current" property="isCurrent" jdbcType="BOOLEAN"/>
@@ -25,6 +26,7 @@
                 d.dept_id,
                 d.parent_id,
                 d.name,
+                d.num,
                 1 AS level,
                 CAST(d.dept_id AS CHAR(200)) AS path,
                 d.parent_id AS original_parent_id,
@@ -46,6 +48,7 @@
                 child.dept_id,
                 child.parent_id,
                 child.name,
+                child.num,
                 parent.level + 1 AS level,
                 CONCAT(parent.path, ',', child.dept_id) AS path,
                 child.parent_id AS original_parent_id,
@@ -73,6 +76,7 @@
                 )
             END AS parent_group_id,
             h.name AS group_name,
+            h.num,
             CURRENT_DATE AS valid_from,
             '9999-12-31' AS valid_to,
             1 AS is_current
@@ -88,6 +92,7 @@
             group_type,
             parent_group_id,
             group_name,
+            num,
             valid_from,
             valid_to,
             is_current
@@ -99,6 +104,7 @@
                 #{group.groupType, jdbcType=VARCHAR},
                 #{group.parentGroupId, jdbcType=BIGINT},
                 #{group.groupName, jdbcType=VARCHAR},
+                #{group.num, jdbcType=INTEGER},
                 #{group.validFrom, jdbcType=DATE},
                 #{group.validTo, jdbcType=DATE},
                 #{group.isCurrent, jdbcType=BOOLEAN}

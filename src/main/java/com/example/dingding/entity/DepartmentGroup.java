@@ -63,6 +63,8 @@ public class DepartmentGroup implements Serializable {
     @TableField("short_name")
     private String shortName;
 
+    private Integer num;
+
     /**
      * 版本生效日期
      */

@@ -145,7 +145,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         }
         redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT + unifiedDepartmentConfig.getProject().getVirtualId(), member.size());
         // 2. 构建树形结构
-        List<DepartmentGroup> groupList = buildProjectDepartmentTree(projectDepts);
+        List<DepartmentGroup> groupList = buildProjectDepartmentTree(projectDepts, member.size());
 
         // 3. 批量插入数据
         int insertedCount = departmentGroupMapper.batchInsert(groupList);
@@ -188,7 +188,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT + unifiedDepartmentConfig.getHeadquarter().getVirtualId(), member.size());
 
         // 2. 构建树形结构
-        List<DepartmentGroup> groupList = buildHeadquarterDepartmentTree(headquarterDepts);
+        List<DepartmentGroup> groupList = buildHeadquarterDepartmentTree(headquarterDepts, member.size());
 
         // 3. 批量插入数据
         int insertedCount = departmentGroupMapper.batchInsert(groupList);
@@ -323,9 +323,10 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      * 构建项目部的树形结构
      *
      * @param departments 部门列表
+     * @param member
      * @return 部门分组列表
      */
-    private List<DepartmentGroup> buildProjectDepartmentTree(List<DepartmentSCD2> departments) {
+    private List<DepartmentGroup> buildProjectDepartmentTree(List<DepartmentSCD2> departments, int member) {
         List<DepartmentGroup> result = new ArrayList<>();
 
         // 1. 创建项目部根节点（REGION类型，parent_group_id=null）
@@ -340,6 +341,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         projectRoot.setCurrentVersion(true);
         projectRoot.setValidFrom(LocalDate.now());
         projectRoot.setValidTo(LocalDate.of(9999, 12, 31));
+        projectRoot.setNum(member);
         result.add(projectRoot);
 
         // 2. 构建部门映射
@@ -396,6 +398,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
             group.setCurrentVersion(true);
             group.setValidFrom(LocalDate.now());
             group.setValidTo(LocalDate.of(9999, 12, 31));
+            group.setNum(dept.getNum());
             result.add(group);
 
             // 5. 递归处理子部门（group_type=null，层级不限）
@@ -428,6 +431,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
                 group.setCurrentVersion(true);
                 group.setValidFrom(LocalDate.now());
                 group.setValidTo(LocalDate.of(9999, 12, 31));
+                group.setNum(dept.getNum());
                 result.add(group);
 
                 // 继续递归处理下级
@@ -440,9 +444,10 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
      * 构建总部的树形结构
      *
      * @param departments 部门列表
+     * @param size
      * @return 部门分组列表
      */
-    private List<DepartmentGroup> buildHeadquarterDepartmentTree(List<DepartmentSCD2> departments) {
+    private List<DepartmentGroup> buildHeadquarterDepartmentTree(List<DepartmentSCD2> departments, int size) {
         List<DepartmentGroup> result = new ArrayList<>();
 
         // 1. 创建总部根节点（REGION类型，parent_group_id=null）
@@ -457,6 +462,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         headquarterRoot.setCurrentVersion(true);
         headquarterRoot.setValidFrom(LocalDate.now());
         headquarterRoot.setValidTo(LocalDate.of(9999, 12, 31));
+        headquarterRoot.setNum(size);
         result.add(headquarterRoot);
 
         // 2. 构建部门映射（重要：使用LinkedHashMap避免重复键异常）
@@ -500,6 +506,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
             group.setCurrentVersion(true);
             group.setValidFrom(LocalDate.now());
             group.setValidTo(LocalDate.of(9999, 12, 31));
+            group.setNum(dept.getNum());
             result.add(group);
 
             // 5. 递归处理子部门（group_type=null，层级不限）
@@ -530,6 +537,7 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
                 group.setCurrentVersion(true);
                 group.setValidFrom(LocalDate.now());
                 group.setValidTo(LocalDate.of(9999, 12, 31));
+                group.setNum(dept.getNum());
                 result.add(group);
 
                 // 继续递归处理下级
