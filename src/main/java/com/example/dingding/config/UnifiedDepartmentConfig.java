@@ -51,8 +51,7 @@ public class UnifiedDepartmentConfig {
         private List<String> targetDepartments;
 
         /**
-         * 虚拟ID（用于区分不同类型的根节点）
-         * 项目部使用-1，总部使用-2，避免与真实部门ID冲突
+         * 虚拟ID（用于区分不同类型的虚拟根节点）
          */
         private Long virtualId;
 

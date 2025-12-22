@@ -106,7 +106,7 @@ unified:
     # 总部配置
     headquarter:
       group-name: "总部"
-      virtual-id: -2
+      virtual-id: 1
       target-departments:
         - "财务中心"
         - "信息中心"

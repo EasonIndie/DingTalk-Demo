@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.event.AnalysisEventListener;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.dingding.config.JyOaConstants;
 import com.example.dingding.config.UnifiedDepartmentConfig;
 import com.example.dingding.entity.DepartmentGroup;
 import com.example.dingding.entity.DepartmentSCD2;
@@ -13,6 +14,7 @@ import com.example.dingding.mapper.DepartmentSCD2Mapper;
 import com.example.dingding.service.DepartmentGroupService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -43,6 +45,9 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
     private UnifiedDepartmentConfig unifiedDepartmentConfig;
 
     private static final String ROOT_DEPT_NAME = "区域管理部";
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
 
     @Override
@@ -127,14 +132,26 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
 
         log.info("找到 {} 个项目相关部门", projectDepts.size());
 
+        //1.5设置定义的区域用户数
+        Set<String> member = new HashSet<>();
+        for (DepartmentSCD2 departmentSCD2 : projectDepts){
+            Set<Object> members = redisTemplate.opsForSet().members(JyOaConstants.DEPT_USER_IDS + departmentSCD2.getDeptId().toString());
+            if (members != null && !members.isEmpty()) {
+                members.stream()
+                        .filter(Objects::nonNull)
+                        .map(String::valueOf)
+                        .forEach(member::add);
+            }
+        }
+        redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT + unifiedDepartmentConfig.getProject().getVirtualId(), member.size());
         // 2. 构建树形结构
         List<DepartmentGroup> groupList = buildProjectDepartmentTree(projectDepts);
 
         // 3. 批量插入数据
-        int insertedCount = departmentGroupMapper.batchInsert(groupList);
+//        int insertedCount = departmentGroupMapper.batchInsert(groupList);
 
-        log.info("成功生成 {} 条项目部统计数据", insertedCount);
-        return insertedCount;
+//        log.info("成功生成 {} 条项目部统计数据", insertedCount);
+        return 0;
     }
 
     /**
@@ -156,6 +173,19 @@ public class DepartmentGroupServiceImpl implements DepartmentGroupService {
         }
 
         log.info("找到 {} 个总部相关部门", headquarterDepts.size());
+
+        //1.5设置定义的区域用户数
+        Set<String> member = new HashSet<>();
+        for (DepartmentSCD2 departmentSCD2 : headquarterDepts){
+            Set<Object> members = redisTemplate.opsForSet().members(JyOaConstants.DEPT_USER_IDS + departmentSCD2.getDeptId().toString());
+            if (members != null && !members.isEmpty()) {
+                members.stream()
+                        .filter(Objects::nonNull)
+                        .map(String::valueOf)
+                        .forEach(member::add);
+            }
+        }
+        redisTemplate.opsForValue().set(JyOaConstants.PARTICIPANTS_CNT + unifiedDepartmentConfig.getHeadquarter().getVirtualId(), member.size());
 
         // 2. 构建树形结构
         List<DepartmentGroup> groupList = buildHeadquarterDepartmentTree(headquarterDepts);
