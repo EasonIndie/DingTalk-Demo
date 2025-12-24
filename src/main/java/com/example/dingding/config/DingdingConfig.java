@@ -91,6 +91,10 @@ public class DingdingConfig {
          * 获取部门用户列表
          */
         private String userListUrl = "/topapi/v2/user/list";
+        /**
+         * 获取用户信息
+         */
+        private String userGet= "/topapi/v2/user/get";
 
         /**
          * 获取用户详细信息API
@@ -115,7 +119,7 @@ public class DingdingConfig {
         /**
          * API调用间隔时间（毫秒）
          */
-        private long apiCallInterval = 20;
+        private long apiCallInterval = 10;
 
         /**
          * 最大时间拆分数量

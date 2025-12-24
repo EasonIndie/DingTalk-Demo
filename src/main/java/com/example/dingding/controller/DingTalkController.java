@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,4 +69,20 @@ public class DingTalkController {
         }
     }
 
+    /**
+     * 每天同步没有更新职位信息的提案流程
+     */
+    @PutMapping("/sync/employeeTitle")
+    public void syncEmployeeTitle(){
+        LocalDateTime now = LocalDateTime.now().minusMonths(1);
+        dingTalkOAService.syncEmployeeTitle(now);
+    }
+
+    /**
+     * 按需同步，可以每月同步一次
+     */
+    @PutMapping("/sync/cacheEmployeeTitle")
+    public void cacheEmployeeTitle(){
+        dingTalkOAService.cacheEmployeeTitle();
+    }
 }

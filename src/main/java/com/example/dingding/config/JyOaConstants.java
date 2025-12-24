@@ -24,4 +24,5 @@ public class JyOaConstants {
     public static final String DEPT_USER_IDS = "jyoa:deptuserids:";
 
     public static final String PARTICIPANTS_CNT = "jyoa:participants:cnt:";
+    public static final String EMPLOYEE_TITLE = "jyoa:title";
 }

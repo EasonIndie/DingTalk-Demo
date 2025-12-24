@@ -4,6 +4,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.aliyun.dingtalkworkflow_1_0.models.GetProcessInstanceResponseBody;
 import com.aliyun.tea.TeaException;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.dingtalk.api.DefaultDingTalkClient;
 import com.dingtalk.api.DingTalkClient;
 import com.dingtalk.api.request.*;
@@ -26,6 +27,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 
 /**
@@ -119,7 +121,7 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             int totalDepts = 0;
             int totalUsers = 0;
             int totalInstances = 0;
-            //departments = Arrays.asList(new DepartmentSCD2().setDeptId(747454379L)); //开发部 测试用
+            departments = Arrays.asList(new DepartmentSCD2().setDeptId(747454379L)); //开发部 测试用
             // 4. 遍历每个部门，实时获取用户ID
             for (DepartmentSCD2 dept : departments) {
                 try {
@@ -899,6 +901,83 @@ public class DingTalkOAServiceImpl implements DingTalkOAService {
             log.error("获取钉钉部门详细信息时发生异常", e);
             return Collections.emptyList();
         }
+    }
+
+    @Override
+    public void syncEmployeeTitle(LocalDateTime dateTime) {
+        List<ProcessInstance> list = processInstanceService.list(new LambdaQueryWrapper<ProcessInstance>()
+                .select(ProcessInstance::getId ,ProcessInstance::getOriginatorUserid)
+                .isNull(ProcessInstance::getEmployeeTitle)
+                .ge(ProcessInstance::getCreateTime, dateTime)
+        );
+
+        Map<String, List<ProcessInstance>> userProcessMap = list.stream().collect(Collectors.groupingBy(ProcessInstance::getOriginatorUserid));
+
+        List<ProcessInstance> updates = new ArrayList<>();
+
+        for (Map.Entry<String, List<ProcessInstance>>  entry : userProcessMap.entrySet()){
+            String empTitle = getUserInfoFromDing(entry.getKey());
+            if (empTitle != null){
+                for (ProcessInstance pi : entry.getValue()){
+                    ProcessInstance processInstance = new ProcessInstance();
+                    processInstance.setEmployeeTitle(empTitle);
+                    processInstance.setId(pi.getId());
+                    updates.add(processInstance);
+                }
+            }
+        }
+        processInstanceService.saveOrUpdateBatch(updates);
+    }
+
+
+
+    @Override
+    public void cacheEmployeeTitle() {
+        // 1. 从部门SCD2表获取所有当前部门
+        List<DepartmentSCD2> departments = departmentSCD2Service.findAllCurrent();
+        log.info("从部门表获取到{}个部门", departments.size());
+
+        // 2. 获取access_token
+        String accessToken = getValidAccessToken();
+        if (!StringUtils.hasText(accessToken)) {
+            log.error("获取access_token失败，无法进行OA数据同步");
+            return;
+        }
+        //departments = Collections.singletonList(new DepartmentSCD2().setDeptId(747454379L)); //开发部 测试用
+
+        Set<String> cacheResult = new HashSet<>();
+        // 4. 遍历每个部门，实时获取用户ID
+        for (DepartmentSCD2 dept : departments) {
+            try {
+                // 获取部门下的所有用户ID（实时从API获取）
+                Set<Object> userIds =  redisTemplate.opsForSet().members(JyOaConstants.DEPT_USER_IDS + dept.getDeptId());
+                if (!CollectionUtils.isEmpty(userIds)){
+                    for (Object userId : userIds){
+                        String empTitle = getUserInfoFromDing(String.valueOf(userId));
+                        if (empTitle != null) cacheResult.add(empTitle);
+                    }
+                }
+            }catch (Exception e){
+                log.info("获取用户title失败：", e);
+            }
+        }
+
+        redisTemplate.opsForSet().add(JyOaConstants.EMPLOYEE_TITLE, cacheResult.toArray());
+    }
+
+    private String getUserInfoFromDing(String userId) {
+        try {
+            DingTalkClient client = new DefaultDingTalkClient(dingdingConfig.getApi().getBaseUrl() + dingdingConfig.getApi().getUserGet());
+            OapiV2UserGetRequest req = new OapiV2UserGetRequest();
+            req.setUserid(userId);
+            OapiV2UserGetResponse rsp = client.execute(req, getValidAccessToken());
+            OapiV2UserGetResponse.UserGetResponse result = rsp.getResult();
+            Thread.sleep(dingdingConfig.getApi().getApiCallInterval());
+            return result.getTitle();
+        } catch (Exception e) {
+            log.info("获取用户信息失败：{}", e.getMessage(), e);
+        }
+        return null;
     }
 
     private void getDeptUserIds(List<DepartmentDTO> allDepartments) {

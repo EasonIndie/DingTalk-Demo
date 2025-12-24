@@ -54,6 +54,12 @@ public class ProcessInstance {
     private String originatorUserid;
 
     /**
+     * 发起人用户ID
+     */
+    @TableField("employee_title")
+    private String employeeTitle;
+
+    /**
      * 发起人部门ID
      */
     @TableField("originator_dept_id")

@@ -29,4 +29,14 @@ public interface DingTalkOAService {
      * @return 所有部门的详细信息列表
      */
     List<DepartmentDTO> getAllDepartmentsWithDetails();
+
+    /**
+     * 根据流程发起人更新职位信息
+     */
+    void syncEmployeeTitle(LocalDateTime dateTime);
+
+    /**
+     * 缓存职位信息做字典
+     */
+    void cacheEmployeeTitle();
 }
